@@ -1,0 +1,3158 @@
+---
+title: "combine three countries"
+author: "Yiqi Zhu"
+date: "2026-03-20"
+output: html_document
+---
+```{r}
+
+library(tidyverse)
+library(summarytools)
+library(readxl)
+library(dplyr)
+library(stargazer)
+library(gtsummary)
+library(sjPlot)
+library(lme4)
+library(haven)
+library(MPI)
+```
+
+```{r, results='hide'}
+library(table1)
+
+
+pvalue <- function(x, ...) {
+    # Construct vectors of data y, and groups (strata) g
+    y <- unlist(x)
+    g <- factor(rep(1:length(x), times=sapply(x, length)))
+    if (is.numeric(y)) {
+        # For numeric variables, perform a standard 2-sample t-test
+        p <- t.test(y ~ g)$p.value
+    } else {
+        # For categorical variables, perform a chi-squared test of independence
+        p <- chisq.test(table(y, g))$p.value
+    }
+    # Format the p-value, using an HTML entity for the less-than sign.
+    # The initial empty string places the output on the line below the variable label.
+    c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+```
+
+```{r}
+install.packages(c("usethis", "gitcreds"))
+gitcreds::gitcreds_set(1)         # paste the token here once
+usethis::use_git()   
+```
+
+```{r}
+
+MP_all<-read.csv("MP_all_final for the paper.csv")
+
+MP_all$rudas_3c="Cognitively normal"
+MP_all$rudas_3c[MP_all$rudas<=14]="moderate_severe dementia"
+MP_all$rudas_3c[MP_all$rudas>14&MP_all$rudas<=19]="mild dementia"
+
+freq(MP_all$rudas_3c)
+
+
+freq(MP_all$rudas_3c[MP_all$country=="SA"])
+
+
+
+freq(MP_all$country)
+
+MP_all2 <- MP_all %>%
+  mutate(across(starts_with("d"), ~ as.character(.)))
+
+table1(~d1_edu+d2_disab+d3_housing+d4_cleanwater+d5_cooking+d6_heating+d7_lighting+d8_sanitation+d10_Emp_ad+d11_Stigma+d12_depression+d13_Distress+as.numeric(age)+factor(sex)+factor(status)+age_c+as.numeric(rudas)+country|rudas_3c,data =MP_all)
+
+MP_age1_mild_dementia2 <- MP_age1_mild_dementia %>%
+  mutate(across(starts_with("d"), ~ as.character(.)))
+table1(~d1_edu+d2_disab+d3_housing+d4_cleanwater+d5_cooking+d6_heating+d7_lighting+d8_sanitation+d10_Emp_ad+d11_Stigma+d12_depression+d13_Distress+as.numeric(age)+factor(sex)+factor(status)+age_c+as.numeric(rudas)|country,data =MP_age1_mild_dementia2)
+
+MP_age1_moderate_dementia2 <- MP_age1_moderate_dementia %>%
+  mutate(across(starts_with("d"), ~ as.character(.)))
+table1(~d1_edu+d2_disab+d3_housing+d4_cleanwater+d5_cooking+d6_heating+d7_lighting+d8_sanitation+d10_Emp_ad+d11_Stigma+d12_depression+d13_Distress+as.numeric(age)+factor(sex)+factor(status)+age_c+as.numeric(rudas)|country,data =MP_age1_moderate_dementia2)
+
+```
+
+
+
+
+
+
+# datalist ( by sex and by age group only)
+
+```{r}
+freq(MP_all$rudas_3c)
+
+MP_all$rudas_c[MP_all$rudas_3c=="Cognitively normal"]="cn"
+MP_all$rudas_c[MP_all$rudas_3c=="mild dementia"]="mild"
+MP_all$rudas_c[MP_all$rudas_3c=="moderate_severe dementia"]="moderate"
+freq(MP_all$rudas_c)
+
+
+
+MP_women<-MP_all[MP_all$sex==1,]
+MP_men<-MP_all[MP_all$sex==0,]
+MP_age1<-MP_all[as.numeric(MP_all$age)<60,]
+
+MP_age2<-MP_all[MP_all$age>59,]
+MP_age3<-MP_all[MP_all$age>69,]
+
+freq(MP_all$country)
+
+MP_AFG<-MP_all[MP_all$country=="AFG",]
+MP_PK<-MP_all[MP_all$country=="PK",]
+MP_SA<-MP_all[MP_all$country=="SA",]
+
+
+dataset_list <- list(
+  MP_all_all=MP_all,
+  MP_women= MP_women,
+  MP_men= MP_men,
+  MP_age1 = MP_age1,
+  MP_age2= MP_age2,
+  MP_age3= MP_age3,
+  MP_AFG=MP_AFG,
+  MP_PK=MP_PK,
+  MP_SA=MP_SA)
+
+```
+
+# table 1 loop and save as excel
+
+```{r}
+
+
+
+
+table1_results <- lapply(dataset_list, function(df) {
+  
+  df <- df %>%
+  mutate(across(starts_with("d"), ~ as.character(.)))
+  table1(
+    ~ d1_edu + d2_disab + d3_housing + d4_cleanwater + d5_cooking +
+      d6_heating + d7_lighting + d8_sanitation + d10_Emp_ad + d11_Stigma +
+      d12_depression + d13_Distress| rudas_3c,
+    data = df
+  )
+})
+
+table1_results[["MP_all_all"]]
+table1_results[["MP_women_moderate_dementia"]]
+
+lapply(table1_results, print)
+
+library(openxlsx)
+
+wb <- createWorkbook()
+
+for (name in names(table1_results)) {
+  addWorksheet(wb, sheetName = substr(name, 1, 31))  # Excel limits sheet names to 31 chars
+  tbl <- as.data.frame(table1_results[[name]])
+  writeData(wb, sheet = name, x = tbl)
+}
+
+saveWorkbook(wb, "table2_descrptives_results_all tables.xlsx", overwrite = TRUE)
+```
+
+
+# Descriptives
+```{r}
+
+freq(MP_all$country)
+
+MP_all<-MP_all %>%arrange(country)
+
+MP_all<-MP_all[!duplicated(MP_all$mem_id),]
+
+dfSummary(MP_all$rudas)
+
+MP_all$rudas_3c="Cognitively normal"
+MP_all$rudas_3c[MP_all$rudas<=14]="moderate_severe dementia"
+MP_all$rudas_3c[MP_all$rudas>14&MP_all$rudas<=19]="mild dementia"
+
+
+
+freq(MP_all$marital_status)
+
+MP_all$status[MP_all$marital_status==0|MP_all$marital_status==1|MP_all$marital_status==4|MP_all$marital_status==5|MP_all$marital_status=="Never married/single"|MP_all$marital_status=="Separated, divorced"|MP_all$marital_status=="Widowed"]="single"
+MP_all$status[MP_all$marital_status==2|MP_all$marital_status==6|MP_all$marital_status=="Married, 1 wife"]="married"
+MP_all$status[MP_all$marital_status==3|MP_all$marital_status=="Married, 2 wives or more"]="married"
+
+freq(MP_all$status)
+
+freq(MP_all$rudas_c)
+
+
+freq(MP_all$sex)
+
+MP_all$sex=MP_all$sex-1
+
+
+MP_all$age_c[MP_all$age<60]="60 and younger"
+MP_all$age_c[MP_all$age>=60&MP_all$age<70]="60-70"
+MP_all$age_c[MP_all$age>=70]="70 and older"
+
+
+freq(MP_all$sex)
+
+table1(~as.numeric(age)+age_c+factor(sex)+status+as.numeric(householdsize)+education+country|rudas_3c,data=MP_all,overall = F)
+
+library(nnet)
+
+cont_vars <- c("age", "householdsize","education")
+
+lapply(cont_vars, function(v) {
+  formula <- as.formula(paste0("as.numeric(", v, ") ~ rudas_3c"))
+  summary(lm(formula, data = MP_all))
+})
+
+# Binary categorical
+bin_vars <- c("sex")
+
+lapply(bin_vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ rudas_3c"))
+  summary(glm(formula, data = MP_all, family = binomial))
+})
+
+# Multicategory
+library(broom)
+
+multi_vars <- c("sex","country","status")
+
+lapply(multi_vars, function(v) {
+  formula <- as.formula(paste0(v, " ~ rudas_3c"))
+  tidy(multinom(formula, data = MP_all))
+})
+```
+
+# all the datasets
+```{r}
+
+freq(MP_all$rudas_3c)
+MP_all_moderate_dementia<-MP_all[MP_all$rudas_3c=="moderate_severe dementia",]
+MP_all_mild_dementia<-MP_all[MP_all$rudas_3c=="mild dementia",]
+MP_no_dementia<-MP_all[MP_all$rudas_3c=="Cognitively normal",]
+
+
+# by gender and age group
+freq(MP_all$sex)
+
+
+
+MP_women_moderate_dementia<-MP_all[MP_all$sex==1&MP_all$rudas_3c=="moderate_severe dementia",]
+MP_women_mild_dementia<-MP_all[MP_all$sex==1&MP_all$rudas_3c=="mild dementia",]
+MP_women_nodementia<-MP_all[MP_all$sex==1&MP_all$rudas_3c=="Cognitively normal",]
+
+MP_men_moderate_dementia<-MP_all[MP_all$sex==0&MP_all$rudas_3c=="moderate_severe dementia",]
+MP_men_mild_dementia<-MP_all[MP_all$sex==0&MP_all$rudas_3c=="mild dementia",]
+
+MP_men_nodementia<-MP_all[MP_all$sex==0&MP_all$rudas_3c=="Cognitively normal",]
+
+
+
+MP_age1_moderate_dementia<-MP_all[as.numeric(MP_all$age)<60&MP_all$rudas_3c=="moderate_severe dementia",]
+MP_age1_mild_dementia<-MP_all[as.numeric(MP_all$age)<60&MP_all$rudas_3c=="mild dementia",]
+MP_age1_nodementia<-MP_all[MP_all$age<60&MP_all$rudas_3c=="Cognitively normal",]
+
+MP_age2_moderate_dementia<-MP_all[MP_all$age>59&MP_all$age<70&MP_all$rudas_3c=="moderate_severe dementia",]
+MP_age2_mild_dementia<-MP_all[MP_all$age>59&MP_all$age<70&MP_all$rudas_3c=="mild dementia",]
+MP_age2_nodementia<-MP_all[MP_all$age>59&MP_all$age<70&MP_all$rudas_3c=="Cognitively normal",]
+
+MP_age3_moderate_dementia<-MP_all[MP_all$age>69&MP_all$rudas_3c=="moderate_severe dementia",]
+MP_age3_mild_dementia<-MP_all[MP_all$age>69&MP_all$rudas_3c=="mild dementia",]
+
+MP_age3_nodementia<-MP_all[MP_all$age>69&MP_all$rudas_3c=="Cognitively normal",]
+```
+
+
+```{r}
+items <- c(
+  "d1_edu","d2_disab","d3_housing","d4_cleanwater",
+  "d5_cooking","d6_heating","d7_lighting","d8_sanitation","d9_Emp_ad",
+  "d11_Stigma","d12_depression","d13_Distress"
+)
+
+# optional: nicer labels for the plot
+item_labels <- c(
+  d1_edu = "School enrollment",
+  d2_disab = "Difficulty functioning",
+  d3_housing = "Crowded space / housing",
+  d4_cleanwater = "Unsafe water",
+  d5_cooking="Cooking energy",
+  d6_heating = "Heating energy",
+  d7_lighting = "Lighting energy",
+  d8_sanitation = "Poor sanitation",
+  d10_Emp_ad = "Unemployment",
+  d11_Stigma= "Discrimination / stigma",
+  d12_depression = "Depression",
+  d13_Distress = "Distress"
+)
+```
+
+# summarize graph
+## data list
+```{r}
+dataset_list <- list(
+  MP_all_all=MP_all,
+  MP_all_moderate_dementia=MP_all_moderate_dementia,
+  MP_all_mild_dementia=MP_all_mild_dementia,
+  MP_all_nodementia=MP_no_dementia,
+  MP_women_moderate_dementia   = MP_women_moderate_dementia,
+  MP_women_mild_dementia=MP_women_mild_dementia,
+  MP_women_nodementia  = MP_women_nodementia,
+  MP_men_moderate_dementia= MP_men_moderate_dementia,
+  MP_men_mild_dementia=MP_men_mild_dementia,
+  MP_men_nodementia    = MP_men_nodementia,
+  MP_age1_moderate_dementia = MP_age1_moderate_dementia,
+  MP_age1_mild_dementia=MP_age1_mild_dementia,
+  MP_age1_nodementia   = MP_age1_nodementia,
+  MP_age2_moderate_dementia = MP_age2_moderate_dementia,
+  MP_age2_mild_dementia=MP_age1_mild_dementia,
+  MP_age2_nodementia   = MP_age1_nodementia,
+  MP_age3_moderate_dementia = MP_age3_moderate_dementia,
+  MP_age3_mild_dementia=MP_age1_mild_dementia,
+  MP_age3_nodementia   = MP_age1_nodementia
+)
+
+
+
+
+
+```
+
+
+```{r}
+for (name in names(dataset_list)) {
+  df <- dataset_list[[name]]
+  
+  mdp_long <- df %>%
+    select(country, starts_with("d")) %>%
+    pivot_longer(
+      cols = starts_with("d"),
+      names_to = "Item",
+      values_to = "value"
+    )
+  
+  chisq_results <- mdp_long %>%
+    group_by(Item) %>%
+    summarise(
+      p_value = tryCatch(
+        chisq.test(table(country, value))$p.value,
+        error = function(e) NA
+      ),
+      .groups = "drop"
+    ) %>%
+    mutate(p_adj = p.adjust(p_value, method = "BH"))
+  
+  mdp_country <- mdp_long %>%
+    group_by(country, Item) %>%
+    summarise(
+      Percent = mean(value == 1, na.rm = TRUE) * 100,
+      .groups = "drop"
+    ) %>%
+    left_join(chisq_results, by = "Item") %>%
+    mutate(
+      sig = case_when(
+        p_adj < 0.001 ~ "***",
+        p_adj < 0.01  ~ "**",
+        p_adj < 0.05  ~ "*",
+        TRUE ~ ""
+      )
+    )
+  
+  sig_labels <- mdp_country %>%
+    group_by(Item) %>%
+    summarise(
+      Percent = max(Percent) + 5,
+      sig = unique(sig),
+      .groups = "drop"
+    )
+  
+  p <- ggplot(mdp_country, aes(x = Item, y = Percent, fill = country)) +
+    geom_col(position = position_dodge()) +
+    coord_flip() + scale_y_continuous(breaks = seq(0, 100, by = 10)) +  
+    scale_x_discrete(labels = item_labels) +
+    scale_fill_discrete(labels = c("AFG" = "Afghanistan",    
+                                   "PK"  = "Pakistan",
+                                   "SA"  = "South Africa"))+
+    theme_minimal(base_size = 14) +
+    labs(
+      x = "Deprivation Items",
+      y = "% of Headcounts deprived in each dimension",
+      title = paste("Deprivation by Item:", name, "(by Country)"),
+      fill = "Country"
+    ) +
+    geom_text(
+      data = sig_labels,
+      aes(x = Item, y = Percent, label = sig),
+      inherit.aes = FALSE,
+      size = 5
+    )
+  
+  ggsave(
+    paste0("./newresults/Figurs_Poverty Head Counts by Dementia Status, Gender, and Age Groups/mdp_deprivation_", name, "_by_country.jpg"),
+    plot = p,
+    width = 10, height = 8, dpi = 300
+  )
+  
+  message("Saved: ", name)
+}
+```
+
+```{r}
+
+library(dplyr)
+library(MPI)
+
+
+
+#---------------------------
+# 1. Select data
+#---------------------------
+Mp_subset_all <- Mp_no_dementia %>%
+  select(starts_with("d"))
+
+Mp_subset_country <- Mp_no_dementia %>%
+  select(starts_with("d"), country)
+
+#---------------------------
+# 2. Run AF_Seq for k = 1:12
+#---------------------------
+all_results <- lapply(1:12, function(k) {
+  AF_Seq(df = Mp_subset_all, k = k)
+})
+
+country_results <- lapply(1:12, function(k) {
+  AF_Seq(df = Mp_subset_country, g = "country", k = k)
+})
+
+#---------------------------
+# 3. Function to extract H, A, M0
+#---------------------------
+extract_HAM0 <- function(x) {
+  c(x$H, x$A, x$M0)
+}
+
+#---------------------------
+# 4. Build each row
+#---------------------------
+table_rows <- lapply(1:12, function(k) {
+  c(
+    k,
+    extract_HAM0(all_results[[k]][[1]]),   # all together
+    extract_HAM0(country_results[[k]][[1]]), # Afghanistan
+    extract_HAM0(country_results[[k]][[2]]), # Pakistan
+    extract_HAM0(country_results[[k]][[3]])  # South Africa
+  )
+})
+
+#---------------------------
+# 5. Combine into final table
+#---------------------------
+table4 <- do.call(rbind, table_rows)
+table4 <- as.data.frame(table4)
+
+colnames(table4) <- c(
+  "K",
+  "All_H", "All_A", "All_M0",
+  "AFG_H", "AFG_A", "AFG_M0",
+  "PK_H", "PK_A", "PK_M0",
+  "SA_H", "SA_A", "SA_M0"
+)
+
+# optional: add header row similar to your old format
+table4_display <- rbind(
+  c("K", "H", "A", "M0", "H", "A", "M0", "H", "A", "M0", "H", "A", "M0"),
+  table4
+)
+
+colnames(table4_display) <- c(
+  "",
+  "All Together", "", "",
+  "Afghanistan", "", "",
+  "Pakistan", "", "",
+  "South Africa", "", ""
+)
+
+#---------------------------
+# 6. Save
+#---------------------------
+write.csv(table4_display, "../results/table4 no dementia. csv")
+
+write.csv(table4, "../results/table4 no dementia.csv", row.names = FALSE)
+
+
+AF_Seq(df = MP_all_moderate_dementia, g = "country", k = k)
+```
+
+
+
+```{r}
+#---------------------------
+# 1. Select data
+#---------------------------
+Mp_subset_all <- MP_all_moderate_dementia %>%
+  select(starts_with("d"))
+
+
+
+Mp_subset_country <- MP_all_moderate_dementia %>%
+  select(starts_with("d"), country)
+
+AF_Seq(Mp_subset_country,g="country",k=4)
+
+#---------------------------
+# 2. Run AF_Seq for k = 1:12
+#---------------------------
+all_results <- lapply(1:12, function(k) {
+  AF_Seq(df = Mp_subset_all, k = k)
+})
+
+country_results <- lapply(1:12, function(k) {
+  AF_Seq(df = Mp_subset_country, g = "country", k = k)
+})
+
+#---------------------------
+# 3. Function to extract H, A, M0
+#---------------------------
+extract_HAM0 <- function(x) {
+  c(x$H, x$A, x$M0)
+}
+
+#---------------------------
+# 4. Build each row
+#---------------------------
+table_rows <- lapply(1:12, function(k) {
+  c(
+    k,
+    extract_HAM0(all_results[[k]][[1]]),   # all together
+    extract_HAM0(country_results[[k]][[1]]), # Afghanistan
+    extract_HAM0(country_results[[k]][[2]]), # Pakistan
+    extract_HAM0(country_results[[k]][[3]])  # South Africa
+  )
+})
+
+#---------------------------
+# 5. Combine into final table
+#---------------------------
+table4 <- do.call(rbind, table_rows)
+table4 <- as.data.frame(table4)
+
+colnames(table4) <- c(
+  "K",
+  "All_H", "All_A", "All_M0",
+  "AFG_H", "AFG_A", "AFG_M0",
+  "PK_H", "PK_A", "PK_M0",
+  "SA_H", "SA_A", "SA_M0"
+)
+
+# optional: add header row similar to your old format
+table4_display <- rbind(
+  c("K", "H", "A", "M0", "H", "A", "M0", "H", "A", "M0", "H", "A", "M0"),
+  table4
+)
+
+colnames(table4_display) <- c(
+  "",
+  "All Together", "", "",
+  "Afghanistan", "", "",
+  "Pakistan", "", "",
+  "South Africa", "", ""
+)
+
+#---------------------------
+# 6. Save
+#---------------------------
+#write.csv(table4_display, "../results/table4 no dementia. csv")
+
+#write.csv(table4, "../results/table4 no dementia.csv", row.names = FALSE)
+
+#write.csv(table4, "../results/table4.1.1 women dementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.1.2 women nodementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.2.1 men dementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.2.2 men nodementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.3.1 age1 dementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.3.2 age1 nodementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.4.1 age2 dementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.4.2 age2 nodementia.csv", row.names = FALSE)
+#write.csv(table4, "../results/table4.5.1 age3 dementia.csv", row.names = FALSE)
+write.csv(table4, "../results/table4.5.2 age3 nodementia.csv", row.names = FALSE)
+
+```
+
+#table 4 code
+```{r}
+
+
+library(dplyr)
+library(MPI)
+
+
+
+#--------------------------------------------------
+# 1. Function to create Table 4 for one dataset
+#--------------------------------------------------
+make_table4 <- function(data, group_var = "country", max_k = 12) {
+  
+  # data without group variable
+  data_all <- data %>%
+    select(starts_with("d"))
+  
+  # data with group variable
+  data_group <- data %>%
+    select(starts_with("d"), all_of(group_var))
+  
+  # run AF_Seq for all k
+  all_results <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_all, k = k)
+  })
+  
+  group_results <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_group, g = group_var, k = k)
+  })
+  
+  # helper function
+  extract_HAM0 <- function(x) {
+    c(x$H, x$A, x$M0)
+  }
+  
+  # get group names from the dataset
+  grp_levels <- c("AFG", "PK", "SA")
+  grp_levels <- grp_levels[grp_levels %in% unique(as.character(data_group[[group_var]]))]  
+  # build rows
+  table_rows <- lapply(1:max_k, function(k) {
+    row_vals <- c(
+      k,
+      extract_HAM0(all_results[[k]][[1]])
+    )
+    
+    for (j in seq_along(grp_levels)) {
+      row_vals <- c(row_vals, extract_HAM0(group_results[[k]][[j]]))
+    }
+    
+    row_vals
+  })
+  
+  table_out <- as.data.frame(do.call(rbind, table_rows))
+  
+  # column names
+  cn <- c("K", "All_H", "All_A", "All_M0")
+  for (g in grp_levels) {
+    cn <- c(cn, paste0(g, "_H"), paste0(g, "_A"), paste0(g, "_M0"))
+  }
+  colnames(table_out) <- cn
+  
+  return(table_out)
+  
+}
+
+extract_M0_only <- function(tab) {
+  tab %>%
+    select(K, ends_with("_M0"))
+}
+
+
+
+
+```
+
+
+# table 4
+
+```{r}
+
+library(dplyr)
+library(MPI)
+
+#--------------------------------------------------
+# 1. Function to create Table 4 for one dataset
+#--------------------------------------------------
+make_table4 <- function(data, group_var = "country", max_k = 12) {
+  
+  # data without group variable
+  data_all <- data %>%
+    select(starts_with("d"))
+  
+  # data with group variable
+  data_group <- data %>%
+    select(starts_with("d"), all_of(group_var))
+  
+  # run AF_Seq for all k
+  all_results <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_all, k = k)
+  })
+  
+  group_results <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_group, g = group_var, k = k)
+  })
+  
+  # helper function
+  extract_HAM0 <- function(x) {
+    c(x$H, x$A, x$M0)
+  }
+  
+  # get group names from the dataset
+  grp_levels <- c("AFG", "PK", "SA")
+  grp_levels <- grp_levels[grp_levels %in% unique(as.character(data_group[[group_var]]))]  
+  # build rows
+  table_rows <- lapply(1:max_k, function(k) {
+    row_vals <- c(
+      k,
+      extract_HAM0(all_results[[k]][[1]])
+    )
+    
+    for (j in seq_along(grp_levels)) {
+      row_vals <- c(row_vals, extract_HAM0(group_results[[k]][[j]]))
+    }
+    
+    row_vals
+  })
+  
+  table_out <- as.data.frame(do.call(rbind, table_rows))
+  
+  # column names
+  cn <- c("K", "All_H", "All_A", "All_M0")
+  for (g in grp_levels) {
+    cn <- c(cn, paste0(g, "_H"), paste0(g, "_A"), paste0(g, "_M0"))
+  }
+  colnames(table_out) <- cn
+  
+  return(table_out)
+  
+}
+
+extract_M0_only <- function(tab) {
+  tab %>%
+    select(K, ends_with("_M0"))
+}
+
+
+```
+
+
+
+```{r}
+
+
+#--------------------------------------------------
+# 2. Put all datasets into a named list
+#--------------------------------------------------
+dataset_list <- list(
+  MP_all_all = MP_all,
+  MP_all_moderate_dementia = MP_all_moderate_dementia,
+  MP_all_mild_dementia = MP_all_mild_dementia,
+  MP_all_nodementia = MP_no_dementia,
+
+  MP_women_moderate_dementia = MP_women_moderate_dementia,
+  MP_women_mild_dementia = MP_women_mild_dementia,
+  MP_women_nodementia = MP_women_nodementia,
+
+  MP_men_moderate_dementia = MP_men_moderate_dementia,
+  MP_men_mild_dementia = MP_men_mild_dementia,
+  MP_men_nodementia = MP_men_nodementia,
+
+  MP_age1_moderate_dementia = MP_age1_moderate_dementia,
+  MP_age1_mild_dementia = MP_age1_mild_dementia,
+  MP_age1_nodementia = MP_age1_nodementia,
+
+  MP_age2_moderate_dementia = MP_age2_moderate_dementia,
+  MP_age2_mild_dementia = MP_age2_mild_dementia,
+  MP_age2_nodementia = MP_age2_nodementia,
+
+  MP_age3_moderate_dementia = MP_age3_moderate_dementia,
+  MP_age3_mild_dementia = MP_age3_mild_dementia,
+  MP_age3_nodementia = MP_age3_nodementia
+)
+results_list <- lapply(dataset_list, make_table4)
+
+dir.create("./newresults", showWarnings = FALSE)
+
+library(openxlsx)
+
+# Create a new workbook
+wb <- createWorkbook()
+
+# Loop through your list and add each dataset as a sheet
+for (nm in names(results_list)) {
+  addWorksheet(wb, sheetName = nm)
+  writeData(wb, sheet = nm, results_list[[nm]])
+}
+
+# Save the workbook
+saveWorkbook(wb, file = "./newresults/all_table4.xlsx", overwrite = TRUE)
+
+```
+
+# select all the m0 to make figures. 
+```{r}
+
+all_m0_combined <- lapply(names(dataset_list), function(nm) {
+  tab4 <- make_table4(dataset_list[[nm]], group_var = "country", max_k = 12)
+  m0_tab <- extract_M0_only(tab4)
+  m0_tab$Dataset <- nm
+  m0_tab
+}) %>%
+  bind_rows() %>%
+  select(Dataset, everything())
+library(openxlsx)
+
+write.xlsx(all_m0_combined,
+           file = "./newresults/Table4_M0_combined.xlsx",
+           overwrite = TRUE)
+```
+
+
+# figure 1
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+tab4 <- read.xlsx("./newresults/Table4_M0_combined.xlsx")
+
+subgroups <- c("all", "women", "men", "age1", "age2", "age3")
+
+for (subgroup in subgroups) {
+  
+  plot_data <- tab4 %>%
+    filter(Dataset %in% c(
+      paste0("MP_", subgroup, "_moderate_dementia"),
+      paste0("MP_", subgroup, "_mild_dementia"),
+      paste0("MP_", subgroup, "_nodementia")
+    )) %>%
+    mutate(
+      Status = case_when(
+        grepl("_moderate_dementia$", Dataset) ~ "Moderate dementia",
+        grepl("_mild_dementia$", Dataset) ~ "Mild dementia",
+        grepl("_nodementia$", Dataset) ~ "No dementia"
+      )
+    ) %>%
+    pivot_longer(
+      cols = c(All_M0, AFG_M0, PK_M0, SA_M0),
+      names_to = "Country",
+      values_to = "M0"
+    ) %>%
+    mutate(
+      Country = case_when(
+        Country == "All_M0" ~ "All",
+        Country == "AFG_M0" ~ "Afghanistan",
+        Country == "PK_M0"  ~ "Pakistan",
+        Country == "SA_M0"  ~ "South Africa"
+      ),
+      Line = paste(Country, Status)
+    )
+  
+  p <- ggplot(plot_data, aes(x = K, y = M0, color = Line, group = Line)) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 1.5) +
+    scale_x_continuous(breaks = 1:12) +
+    labs(
+      title = paste("Table 4 M0 -", subgroup),
+      x = "d value (dimensions)",
+      y = "Adjusted headcount ratio (M0)"
+    ) +
+    theme_bw() +
+    theme(
+      legend.title = element_blank(),
+      legend.position = "right"
+    )
+  
+  ggsave(
+    filename = paste0("./newresults/Figures Adjusted Poverty Head Count for Both Weighting Structures/Table4_M0_", subgroup, ".jpeg"),
+    plot = p,
+    width = 8,
+    height = 5,
+    dpi = 300
+  )
+}
+```
+
+ table 4 code for using dementia level as cut off point
+```{r}
+
+```
+
+
+# plot table 4 code for using dementia level as cut off point
+
+```{r}
+tab4 <- read.xlsx("./newresults/Table4_M0_combined_long.xlsx")
+
+plot_data <- tab4 %>%
+  mutate(
+    Subgroup = case_when(
+      grepl("^MP_all_", Dataset) ~ "All",
+      grepl("^MP_women_", Dataset) ~ "Women",
+      grepl("^MP_men_", Dataset) ~ "Men",
+      grepl("^MP_age1_", Dataset) ~ "50–59",
+      grepl("^MP_age2_", Dataset) ~ "60–69",
+      grepl("^MP_age3_", Dataset) ~ ">70"
+    ),
+    Dementia = case_when(
+      grepl("_cn$", Dataset) ~ "No dementia",
+      grepl("_mild$", Dataset) ~ "Mild dementia",
+      grepl("_moderate$", Dataset) ~ "Moderate dementia"
+    ),
+    Line = paste(Subgroup, Dementia)
+  ) %>%
+  filter(!is.na(Subgroup), !is.na(Dementia))
+
+p <- ggplot(plot_data, aes(x = K, y = M0, color = Line, group = Line)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.5) +
+  scale_x_continuous(breaks = 1:12) +
+  labs(
+    title = "M0 by Sex and Dementia Status",
+    x = "d value (dimensions)",
+    y = "Adjusted headcount ratio (M0)"
+  ) +
+  theme_bw() +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "right"
+  )
+
+ggsave(
+  filename = "./newresults/Table4_M0_sex_age_groups.jpeg",
+  plot = p,
+  width = 8,
+  height = 5,
+  dpi = 300
+)
+
+```
+
+
+
+```{r}
+
+library(dplyr)
+
+freq(MP_all$rudas_c)
+library(MPI)
+
+#--------------------------------------------------
+# 1. Function to create Table 4 for one dataset
+#--------------------------------------------------
+make_table4 <- function(data, group_var = "rudas_c", max_k = 12) {
+  
+  data <- data %>%
+    mutate(across(all_of(group_var), ~ trimws(as.character(.x))))
+  
+  groups <- c("cn", "mild", "moderate")
+  
+  extract_HAM0 <- function(x) {
+    if (is.null(x)) return(c(H = NA, A = NA, M0 = NA))
+    c(H = x$H, A = x$A, M0 = x$M0)
+  }
+  
+  table_rows <- lapply(1:max_k, function(k) {
+    
+    data_all <- data %>%
+      select(starts_with("d"))
+    
+    all_result <- AF_Seq(df = data_all, k = k)[[1]]
+    
+    row_vals <- c(
+      K = k,
+      All_H = all_result$H,
+      All_A = all_result$A,
+      All_M0 = all_result$M0
+    )
+    
+    for (g in groups) {
+      
+      data_g <- data %>%
+        filter(.data[[group_var]] == g) %>%
+        select(starts_with("d"))
+      
+      result_list <- AF_Seq(df = data_g, k = k)
+      result_g <- result_list[[1]]
+      
+      row_vals <- c(
+        row_vals,
+        setNames(
+          extract_HAM0(result_g),
+          paste0(g, c("_H", "_A", "_M0"))
+        )
+      )
+    }
+    
+    row_vals
+  })
+  
+  as.data.frame(do.call(rbind, table_rows))
+}
+```
+
+```{r}
+library(dplyr)
+library(dunn.test)
+
+make_table4 <- function(data, group_var = "rudas_c", max_k = 12,
+                        dcols = NULL, weights = NULL) {
+
+  data <- data %>%
+    mutate(across(all_of(group_var), ~ trimws(as.character(.x))))
+
+  groups <- c("cn", "mild", "moderate")
+
+  ## ---- per-person deprivation score (must match AF_Seq's weighting) ----
+  if (is.null(dcols))   dcols   <- grep("^d", names(data), value = TRUE)
+  ndim <- length(dcols)
+  if (is.null(weights)) weights <- rep(1 / ndim, ndim)   # EQUAL weights by default
+  D        <- as.matrix(data[dcols])
+  ci_share <- as.numeric(D %*% weights)   # weighted deprivation share (0..1) -> feeds M0
+  ki_count <- rowSums(D)                  # raw count 0..ndim -> defines "poor at cutoff k"
+
+  extract_HAM0 <- function(x) {
+    if (is.null(x)) return(c(H = NA, A = NA, M0 = NA))
+    c(H = x$H, A = x$A, M0 = x$M0)
+  }
+
+  ## ---- one Dunn's test at cutoff k, return cn-vs-mild & cn-vs-moderate p ----
+  dunn_vs_cn <- function(k) {
+    censored <- ci_share * (ki_count >= k)            # censored score (0 if not poor at k)
+    keep <- data[[group_var]] %in% groups & !is.na(censored)
+    s  <- censored[keep]
+    gg <- factor(data[[group_var]][keep], levels = groups)
+    out <- c(mild = NA_real_, moderate = NA_real_)
+    # need >=2 non-empty groups AND some spread, else Dunn/KW is undefined
+    if (nlevels(droplevels(gg)) < 2 || length(unique(s)) < 2) return(out)
+    dt <- dunn.test(s, gg, method = "bonferroni", kw = TRUE,
+                    table = FALSE, list = FALSE, altp = FALSE)
+    for (g in c("mild", "moderate")) {
+      idx <- which(dt$comparisons %in% c(paste("cn -", g), paste(g, "- cn")))
+      if (length(idx)) out[g] <- dt$P.adjusted[idx[1]]
+    }
+    out
+  }
+
+  table_rows <- lapply(1:max_k, function(k) {
+
+    all_result <- AF_Seq(df = select(data, starts_with("d")), k = k)[[1]]
+    row_vals <- c(K = k, All_H = all_result$H,
+                  All_A = all_result$A, All_M0 = all_result$M0)
+
+    m0 <- c()
+    for (g in groups) {
+      data_g   <- data %>% filter(.data[[group_var]] == g) %>% select(starts_with("d"))
+      result_g <- AF_Seq(df = data_g, k = k)[[1]]
+      ham      <- extract_HAM0(result_g)
+      m0[g]    <- ham["M0"]
+      row_vals <- c(row_vals, setNames(ham, paste0(g, c("_H", "_A", "_M0"))))
+    }
+
+    ## ---- NEW: % difference in M0 vs cn, and Dunn p-value vs cn ----
+    pvals <- dunn_vs_cn(k)
+    for (g in c("mild", "moderate")) {
+      pct <- (m0[[g]] - m0[["cn"]]) / m0[["cn"]]
+      row_vals <- c(row_vals,
+                    setNames(pct,       paste0(g, "_pctdiff_M0")),
+                    setNames(pvals[[g]], paste0(g, "_p_vs_cn")))
+    }
+    row_vals
+  })
+
+  as.data.frame(do.call(rbind, table_rows))
+}
+```
+
+```{r}
+results_list <- lapply(dataset_list, make_table4)
+
+
+
+dir.create("./newresults", showWarnings = FALSE)
+
+library(openxlsx)
+
+# Create a new workbook
+wb <- createWorkbook()
+
+# Loop through your list and add each dataset as a sheet
+for (nm in names(results_list)) {
+  addWorksheet(wb, sheetName = nm)
+  writeData(wb, sheet = nm, results_list[[nm]])
+}
+
+# Save the workbook
+saveWorkbook(wb, file = "./newresults/all_table4_pvalue.xlsx", overwrite = TRUE)
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+make_table4 <- function(data, group_var = "rudas_c", max_k = 12) {
+  
+  data <- data %>%
+    mutate(across(all_of(group_var), ~ trimws(as.character(.x))))
+  
+  groups <- sort(unique(na.omit(data[[group_var]])))
+  
+  extract_HAM0 <- function(x) {
+    c(H = x$H, A = x$A, M0 = x$M0)
+  }
+  
+  table_rows <- lapply(1:max_k, function(k) {
+    
+    all_result <- AF_Seq(
+      df = data %>% select(starts_with("d")),
+      k = k
+    )[[1]]
+    
+    row_vals <- c(
+      K = k,
+      All_H = all_result$H,
+      All_A = all_result$A,
+      All_M0 = all_result$M0
+    )
+    
+    for (g in groups) {
+      
+      data_g <- data %>%
+        filter(.data[[group_var]] == g) %>%
+        select(starts_with("d"))
+      
+      result_g <- AF_Seq(df = data_g, k = k)[[1]]
+      
+      row_vals <- c(
+        row_vals,
+        setNames(
+          extract_HAM0(result_g),
+          paste0(g, c("_H", "_A", "_M0"))
+        )
+      )
+    }
+    
+    row_vals
+  })
+  
+  as.data.frame(do.call(rbind, table_rows))
+}
+```
+
+```{r}
+
+extract_M0_only <- function(tab) {
+  tab %>%
+    select(K, ends_with("_M0"))
+}
+
+all_m0_combined <- lapply(names(dataset_list), function(nm) {
+  
+  tab4 <- make_table4(dataset_list[[nm]], group_var = "rudas_c", max_k = 12)
+  
+  extract_M0_only(tab4) %>%
+    tidyr::pivot_longer(
+      cols = ends_with("_M0"),
+      names_to = "Group",
+      values_to = "M0"
+    ) %>%
+    mutate(
+      Group = gsub("_M0", "", Group),
+      Dataset = paste(nm, Group, sep = "_")
+    ) %>%
+    select(Dataset, K, M0)
+  
+}) %>%
+  bind_rows()
+
+write.xlsx(
+  all_m0_combined,
+  file = "./newresults/Table4_M0_combined_long.xlsx",
+  overwrite = TRUE
+)
+```
+
+
+
+# Dimension contribution
+
+
+```{r}
+extract_diCont_table <- function(data, dataset_name, max_k = 12) {
+  
+  data_all <- data %>%
+    select(starts_with("d"))
+  
+  var_names <- names(data_all)
+  
+  res_list <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_all, k = k)
+  })
+  
+  out <- lapply(seq_along(res_list), function(i) {
+    k <- i
+    
+    di <- res_list[[i]][[1]]$DimentionalContribution$diCont
+    di_vals <- as.numeric(di)
+    
+    # if AF_Seq does not keep names, use original variable names
+    di_names <- names(di)
+    if (is.null(di_names) || length(di_names) == 0) {
+      di_names <- var_names[seq_along(di_vals)]
+    }
+    
+    # make sure lengths match
+    data.frame(
+      Dataset = rep(dataset_name, length(di_vals)),
+      k = rep(k, length(di_vals)),
+      Dimension = di_names,
+      diCont = di_vals,
+      row.names = NULL
+    )
+  })
+  
+  bind_rows(out)
+}
+
+extract_diCont_table_by_group <- function(data, dataset_name, group_var = "rudas_c", max_k = 12) {
+  
+  library(dplyr)
+  
+  # keep deprivation variables + grouping variable
+  data_group <- data %>%
+    select(starts_with("d"), all_of(group_var))
+  
+  # names of deprivation variables
+  var_names <- data_group %>%
+    select(starts_with("d")) %>%
+    names()
+  
+  # group levels in the data
+  grp_levels <- unique(as.character(data_group[[group_var]]))
+  
+  # run AF_Seq for each k
+  res_list <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_group, g = group_var, k = k)
+  })
+  
+  # extract results
+  out <- lapply(seq_along(res_list), function(i) {
+    k <- i
+    res_k <- res_list[[i]]
+    
+    # for each group
+    group_out <- lapply(seq_along(grp_levels), function(j) {
+      
+      # protect against missing group result
+      if (length(res_k) < j || is.null(res_k[[j]])) {
+        return(NULL)
+      }
+      
+      di <- res_k[[j]]$DimentionalContribution$diCont
+      
+      # protect against missing diCont
+      if (is.null(di)) {
+        return(NULL)
+      }
+      
+      di_vals <- as.numeric(di)
+      
+      # skip if empty
+      if (length(di_vals) == 0) {
+        return(NULL)
+      }
+      
+      di_names <- names(di)
+      
+      # if no names, use original deprivation variable names
+      if (is.null(di_names) || length(di_names) == 0) {
+        di_names <- var_names[seq_along(di_vals)]
+      }
+      
+      # if lengths still do not match, trim to shortest length
+      n <- min(length(di_vals), length(di_names))
+      
+      data.frame(
+        Dataset   = rep(dataset_name, n),
+        Group     = rep(grp_levels[j], n),
+        k         = rep(k, n),
+        Dimension = di_names[1:n],
+        diCont    = di_vals[1:n],
+        row.names = NULL
+      )
+    })
+    
+    bind_rows(group_out)
+  })
+  
+  bind_rows(out)
+}
+
+
+
+diCont_group_all <- purrr::imap_dfr(
+  dataset_list,
+  ~extract_diCont_table_by_group(.x, .y, group_var = "country", max_k = 12)
+)
+
+write.xlsx(diCont_group_all, "./newresults/diCont_all_datasets.xlsx")
+
+
+```
+
+# Table 5 wide
+```{r}
+
+extract_diCont_wide_all_group <- function(data, dataset_name, group_var = "rudas_c", max_k = 12) {
+  
+  # overall data
+  data_all <- data %>%
+    select(starts_with("d"))
+  
+  # grouped data
+  data_group <- data %>%
+    select(starts_with("d"), all_of(group_var))
+  
+  # deprivation variable names
+  var_names <- names(data_all)
+  
+  # fixed group order
+  grp_levels <- c("cn", "mild", "moderate")
+  grp_levels <- grp_levels[grp_levels %in% unique(as.character(data_group[[group_var]]))]
+  
+  # -------------------------
+  # 1. overall results
+  # -------------------------
+  res_all <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_all, k = k)
+  })
+  
+  long_all <- lapply(seq_along(res_all), function(i) {
+    k <- i
+    
+    di <- res_all[[i]][[1]]$DimentionalContribution$diCont
+    if (is.null(di)) return(NULL)
+    
+    di_vals <- as.numeric(di)
+    if (length(di_vals) == 0) return(NULL)
+    
+    di_names <- names(di)
+    if (is.null(di_names) || length(di_names) == 0) {
+      di_names <- var_names[seq_along(di_vals)]
+    }
+    
+    n <- min(length(di_vals), length(di_names))
+    
+    data.frame(
+      Dimension = di_names[1:n],
+      Group = "All",
+      k = paste0("k", k),
+      diCont = di_vals[1:n],
+      row.names = NULL
+    )
+  }) %>% bind_rows()
+  
+  # -------------------------
+  # 2. grouped results
+  # -------------------------
+  res_group <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_group, g = group_var, k = k)
+  })
+  
+  long_group <- lapply(seq_along(res_group), function(i) {
+    k <- i
+    res_k <- res_group[[i]]
+    
+    bind_rows(lapply(seq_along(grp_levels), function(j) {
+      if (length(res_k) < j || is.null(res_k[[j]])) return(NULL)
+      
+      di <- res_k[[j]]$DimentionalContribution$diCont
+      if (is.null(di)) return(NULL)
+      
+      di_vals <- as.numeric(di)
+      if (length(di_vals) == 0) return(NULL)
+      
+      di_names <- names(di)
+      if (is.null(di_names) || length(di_names) == 0) {
+        di_names <- var_names[seq_along(di_vals)]
+      }
+      
+      n <- min(length(di_vals), length(di_names))
+      
+      data.frame(
+        Dimension = di_names[1:n],
+        Group = grp_levels[j],
+        k = paste0("k", k),
+        diCont = di_vals[1:n],
+        row.names = NULL
+      )
+    }))
+  }) %>% bind_rows()
+  
+  # combine overall + country
+  long_out <- bind_rows(long_all, long_group)
+  
+  # wide format
+  wide_out <- long_out %>%
+    mutate(Group_k = paste(Group, k, sep = "_")) %>%
+    select(Dimension, Group_k, diCont) %>%
+    pivot_wider(names_from = Group_k, values_from = diCont, values_fill = NA)
+  
+  # ===== FIX: Build desired columns and ensure they exist =====
+  # Create all expected column combinations
+  all_cols <- c("All", grp_levels)
+  k_vals <- paste0("k", 1:max_k)
+  
+  # Generate all combinations in desired order
+  desired_group_k <- c(
+    paste0("All_", k_vals),
+    as.vector(t(outer(grp_levels, k_vals, paste, sep = "_")))
+  )
+  
+  # Filter to only columns that exist in wide_out
+  desired_group_k <- desired_group_k[desired_group_k %in% names(wide_out)]
+  
+  # Reorder and select
+  wide_out <- wide_out %>% 
+    select(Dimension, all_of(desired_group_k))
+  
+  return(wide_out)
+  
+}
+
+diCont_tables <- imap(
+  dataset_list,
+  ~extract_diCont_wide_all_group(
+    data = .x,
+    dataset_name = .y,
+    group_var = "rudas_c",
+    max_k = 12
+  )
+)
+
+# Convert to format with rownames (Dimension as row names)
+diCont_tables_rownames <- lapply(diCont_tables, function(df) {
+  df <- as.data.frame(df)
+  rownames(df) <- df$Dimension
+  df$Dimension <- NULL
+  df
+})
+
+# Write to Excel with multiple sheets (one per dataset)
+library(openxlsx)
+
+write.xlsx(
+  diCont_tables_rownames,
+  file = "./newresults/diCont_all_datasets_rowname_new.xlsx",
+  rowNames = TRUE
+)
+
+cat("Excel file saved successfully to: ./newresults/diCont_all_datasets_rowname_new.xlsx\n")
+
+
+```
+
+Table 5 by dementia status
+
+```{r}
+extract_diCont_wide_all_group <- function(data, dataset_name, group_var = "rudas_c", max_k = 12) {
+
+  # overall data
+  data_all <- data %>%
+    select(starts_with("d"))
+
+  # grouped data
+  data_group <- data %>%
+    select(starts_with("d"), all_of(group_var))
+
+  # deprivation variable names
+  var_names <- names(data_all)
+
+  # fixed group order
+  grp_levels <- c("cn", "mild", "moderate")
+  grp_levels <- grp_levels[grp_levels %in% unique(as.character(data_group[[group_var]]))]
+
+  # -------------------------
+  # 1. overall results
+  # -------------------------
+  res_all <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_all, k = k)
+  })
+
+  long_all <- lapply(seq_along(res_all), function(i) {
+    k <- i
+
+    di <- res_all[[i]][[1]]$DimentionalContribution$diCont
+    if (is.null(di)) return(NULL)
+
+    di_vals <- as.numeric(di)
+    if (length(di_vals) == 0) return(NULL)
+
+    di_names <- names(di)
+    if (is.null(di_names) || length(di_names) == 0) {
+      di_names <- var_names[seq_along(di_vals)]
+    }
+
+    n <- min(length(di_vals), length(di_names))
+
+    data.frame(
+      Dimension = di_names[1:n],
+      Group = "All",
+      k = paste0("k", k),
+      diCont = di_vals[1:n],
+      row.names = NULL
+    )
+  }) %>% bind_rows()
+
+  
+  # combine overall + country
+  long_out <- bind_rows(long_all, long_group)
+
+  # wide format
+  wide_out <- long_out %>%
+    mutate(Group_k = paste(Group, k, sep = "_")) %>%
+    select(Dimension, Group_k, diCont) %>%
+    pivot_wider(names_from = Group_k, values_from = diCont)  # fixed: was Cont
+
+  # desired column order: All k1-12, then AFG k1-12, PK k1-12, SA k1-12
+  desired_cols <- c(
+    "Dimension",
+    paste0("All_k", 1:max_k),
+    as.vector(t(outer(grp_levels, paste0("k", 1:max_k), paste, sep = "_")))  # fixed: ad
+  )
+
+  desired_cols <- desired_cols[desired_cols %in% names(wide_out)]
+  wide_out <- wide_out %>% select(all_of(desired_cols))
+
+  return(wide_out)
+}
+
+
+diCont_tables <- imap(
+  dataset_list,
+  ~extract_diCont_wide_all_group(
+    data = .x,
+    dataset_name = .y,
+    group_var = "rudas_c",
+    max_k = 12
+  )
+)
+
+diCont_tables_rownames <- lapply(diCont_tables, function(df) {
+  df <- as.data.frame(df)
+  rownames(df) <- df$Dimension
+  df$Dimension <- NULL
+  df
+})
+
+write.xlsx(
+  diCont_tables_rownames,
+  file = "./newresults/diCont_all_datasets_rowname_new.xlsx",
+  rowNames = TRUE
+)
+```
+
+
+
+```{r}
+extract_diCont_wide_all_group <- function(data, dataset_name, group_var = "rudas_c", max_k = 12){
+
+  # overall data
+  data_all <- data %>%
+    select(starts_with("d"))
+
+  # grouped data
+  data_group <- data %>%
+    select(starts_with("d"), all_of(group_var))
+
+  # deprivation variable names
+  var_names <- names(data_all)
+
+  # fixed group order
+  grp_levels <- c("cn", "mild", "moderate")
+  grp_levels <-  grp_levels[grp_levels %in% unique(as.character(data_group[[group_var]]))]
+
+  # -------------------------
+  # 1. overall results
+  # -------------------------
+  res_all <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_all, k = k)
+  })
+
+  long_all <- lapply(seq_along(res_all), function(i) {
+    k <- i
+
+    di <- res_all[[i]][[1]]$DimentionalContribution$diCont
+    if (is.null(di)) return(NULL)
+
+    di_vals <- as.numeric(di)
+    if (length(di_vals) == 0) return(NULL)
+
+    di_names <- names(di)
+    if (is.null(di_names) || length(di_names) == 0) {
+      di_names <- var_names[seq_along(di_vals)]
+    }
+
+    n <- min(length(di_vals), length(di_names))
+
+    data.frame(
+      Dimension = di_names[1:n],
+      Group = "All",
+      k = paste0("k", k),
+      diCont = di_vals[1:n],
+      row.names = NULL
+    )
+  }) %>% bind_rows()
+
+  # -------------------------
+  # 2. grouped results
+  # -------------------------
+  res_group <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_group, g = group_var, k = k)
+  })
+
+  long_group <- lapply(seq_along(res_group), function(i) {
+    k <- i
+    res_k <- res_group[[i]]
+
+    bind_rows(lapply(seq_along(grp_levels), function(j) {
+      if (length(res_k) < j || is.null(res_k[[j]])) return(NULL)
+
+      di <- res_k[[j]]$DimentionalContribution$diCont
+      if (is.null(di)) return(NULL)
+
+      di_vals <- as.numeric(di)
+      if (length(di_vals) == 0) return(NULL)
+
+      di_names <- names(di)
+      if (is.null(di_names) || length(di_names) == 0) {
+        di_names <- var_names[seq_along(di_vals)]
+      }
+
+      n <- min(length(di_vals), length(di_names))
+
+      data.frame(
+        Dimension = di_names[1:n],
+        Group = grp_levels[j],
+        k = paste0("k", k),
+        diCont = di_vals[1:n],
+        row.names = NULL
+      )
+    }))
+  }) %>% bind_rows()
+
+  # combine overall + country
+  long_out <- bind_rows(long_all, long_group)
+
+  # wide format
+  wide_out <- long_out %>%
+    mutate(Group_k = paste(Group, k, sep = "_")) %>%
+    select(Dimension, Group_k, diCont) %>%
+    pivot_wider(names_from = Group_k, values_from = diCont)  # fi
+
+  # desired column order: All k1-12, then AFG k1-12, PK k1-12, SA
+  desired_cols <-c(
+    "Dimension",
+    paste0("All_k", 1:max_k),
+    as.vector(t(outer(grp_levels, paste0("k", 1:max_k), paste, sep = "_")))
+  )
+
+  desired_cols <- desired_cols[desired_cols %in% names(wide_out)]
+  wide_out <- wide_out %>% select(all_of(desired_cols))
+
+  return(wide_out)
+}
+
+
+diCont_tables <- imap(
+  dataset_list,
+  ~extract_diCont_wide_all_group(
+    data = .x,
+    dataset_name = .y,
+    group_var = "country",
+    max_k = 12
+  )
+)
+
+diCont_tables_rownames <- lapply(diCont_tables, function(df) {
+  df <- as.data.frame(df)
+  rownames(df) <- df$Dimension
+  df$Dimension <- NULL
+  df
+})
+
+write.xlsx(
+  diCont_tables_rownames,
+  file = "./newresults/diCont_all_datasets_rowname_2.xlsx",
+  rowNames = TRUE
+)
+```
+
+
+```{r}
+extract_diCont_transposed <- function(data, dataset_name, group_var = "rudas_c", max_k = 12) {
+  
+  library(dplyr)
+  library(tidyr)
+  
+  # overall + grouped data
+  data_all <- data %>% select(starts_with("d"))
+  data_group <- data %>% select(starts_with("d"), all_of(group_var))
+  
+  var_names <- names(data_all)
+  
+  # fixed country order
+  grp_levels <- c("cn", "mild", "moderate")
+  grp_levels <- grp_levels[grp_levels %in% unique(as.character(data_group[[group_var]]))]
+  
+  # -------------------------
+  # 1. overall
+  # -------------------------
+  res_all <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_all, k = k)
+  })
+  
+  long_all <- lapply(seq_along(res_all), function(i) {
+    k <- paste0("k", i)
+    
+    di <- res_all[[i]][[1]]$DimentionalContribution$diCont
+    if (is.null(di)) return(NULL)
+    
+    di_vals <- as.numeric(di)
+    if (length(di_vals) == 0) return(NULL)
+    
+    di_names <- names(di)
+    if (is.null(di_names) || length(di_names) == 0) {
+      di_names <- var_names[seq_along(di_vals)]
+    }
+    
+    n <- min(length(di_vals), length(di_names))
+    
+    data.frame(
+      k = rep(k, n),
+      Group = "All",
+      Dimension = di_names[1:n],
+      diCont = di_vals[1:n]
+    )
+  }) %>% bind_rows()
+  
+  # -------------------------
+  # 2. grouped
+  # -------------------------
+  res_group <- lapply(1:max_k, function(k) {
+    AF_Seq(df = data_group, g = group_var, k = k)
+  })
+  
+  long_group <- lapply(seq_along(res_group), function(i) {
+    k <- paste0("k", i)
+    res_k <- res_group[[i]]
+    
+    bind_rows(lapply(seq_along(grp_levels), function(j) {
+      if (length(res_k) < j || is.null(res_k[[j]])) return(NULL)
+      
+      di <- res_k[[j]]$DimentionalContribution$diCont
+      if (is.null(di)) return(NULL)
+      
+      di_vals <- as.numeric(di)
+      if (length(di_vals) == 0) return(NULL)
+      
+      di_names <- names(di)
+      if (is.null(di_names) || length(di_names) == 0) {
+        di_names <- var_names[seq_along(di_vals)]
+      }
+      
+      n <- min(length(di_vals), length(di_names))
+      
+      data.frame(
+        k = rep(k, n),
+        Group = grp_levels[j],
+        Dimension = di_names[1:n],
+        diCont = di_vals[1:n]
+      )
+    }))
+  }) %>% bind_rows()
+  
+  # combine
+  long_all_data <- bind_rows(long_all, long_group)
+  
+  # create column names like All_d1_Edu, AFG_d2_Disab, etc.
+  long_all_data <- long_all_data %>%
+    mutate(Group_Dim = paste(Group, Dimension, sep = "_"))
+  
+  # pivot: rows = k, columns = dimensions
+  wide_out <- long_all_data %>%
+    select(k, Group_Dim, diCont) %>%
+    pivot_wider(names_from = Group_Dim, values_from = diCont)
+  
+  # order columns nicely
+  desired_cols <- c(
+    "k",
+    paste0("All_", var_names),
+    as.vector(outer(grp_levels, var_names, paste, sep = "_"))
+  )
+  
+  desired_cols <- desired_cols[desired_cols %in% names(wide_out)]
+  wide_out <- wide_out %>% select(all_of(desired_cols))
+  
+  return(wide_out)
+}
+
+diCont_tables_transposed <- purrr::imap(
+  dataset_list,
+  ~extract_diCont_transposed(
+    data = .x,
+    dataset_name = .y,
+    group_var = "rudas_c",
+    max_k = 12
+  )
+)
+  openxlsx::write.xlsx(
+  diCont_tables_transposed,
+  file = "./newresults/diCont_all_transposed.xlsx"
+)
+```
+
+# results 
+```{r}
+Mp_subset_country <- MP_all %>%
+  select(starts_with("d"), country)
+
+dimension_contribution<-AF_Seq(df = Mp_subset_country, k = 4, g="country")
+
+weight<-c(1/6,1/6,1/36,1/36,1/36,1/36,1/36,1/36,1/6,1/6,1/12,1/12)
+dimension_contribution_weighted<-AF_Seq(df = Mp_subset_country, w=weight,g="country")
+
+
+table1<-dimension_contribution_weighted[[1]]$pov_df
+
+table1$Cvector<-NULL
+table1$Intensity<-NULL
+table1$IsPoverty<-NULL
+
+table1<-bind_cols(table1,dimension_contribution[[1]]$pov_df[c("IsPoverty")])
+
+tab1.poverty<-table1[table1$IsPoverty==1,]
+tab1.poverty$IsPoverty<-NULL
+
+r1<-colSums(tab1.poverty)
+r2<-sum(r1)
+MD_AFG<-r1/r2
+
+table2<-dimension_contribution_weighted[[2]]$pov_df
+table2$Cvector<-NULL
+table2$Intensity<-NULL
+table2$IsPoverty<-NULL
+
+table<-bind_cols(table2,dimension_contribution[[2]]$pov_df[c("IsPoverty")])
+
+poverty<-table[table$IsPoverty==1,]
+
+poverty$IsPoverty<-NULL
+
+r1<-colSums(poverty)
+
+r2<-sum(r1)
+
+MD_PK<-r1/r2 # weighted population deprived on 4 indicators/total MPI. 
+
+
+table3<-dimension_contribution_weighted[[3]]$pov_df
+table3$Cvector<-NULL
+table3$Intensity<-NULL
+table3$IsPoverty<-NULL
+
+table<-bind_cols(table3,dimension_contribution[[3]]$pov_df[c("IsPoverty")])
+
+poverty<-table[table$IsPoverty==1,]
+
+poverty$IsPoverty<-NULL
+
+r1<-colSums(poverty)
+
+r2<-sum(r1)
+
+MD_SA<-r1/r2
+
+di_count<-bind_rows(MD_AFG,MD_PK,MD_SA)
+
+write.csv(di_count,"di_count.csv")
+
+di_count<-read.csv("di_count.csv")
+di_count$X<-NULL
+attach(di_count)
+
+coul <- c("#1B9E77", "#D95F02", "#7570B3")
+colors_border <- coul
+colors_in <- scales::alpha(coul, 0.3)
+
+tiff("dementia_chart.tiff", width = 6, height = 6, units = "in", res = 300)
+
+radarchart(
+  di_count,
+  axistype = 1,
+  pcol = colors_border,     # border colors for 3 groups
+  pfcol = colors_in,        # transparent fills
+  plwd = 2,
+  plty = 1,
+  vlabels = c("Education", "Healthcare",
+              "Household", "Employment",
+              "Stigma", "Depression", "Distress"),
+  cglcol = "grey",
+  cglty = 1,
+  axislabcol = "grey",
+  caxislabels = c("0", "", "25%", "", "50%"),
+  cglwd = 0.8,
+  calcex = 0.8,
+  vlcex = 0.8
+)
+
+legend(
+  "topright",
+  legend = c("Afghanistan", "Pakistan", "South Africa"),
+  col = colors_border,
+  pt.bg = colors_in,
+  lty = 1,
+  lwd = 2,
+  bty = "n",
+  cex = 0.8
+)
+
+dev.off()
+```
+
+
+
+# make the spider web function
+
+
+
+
+```{r}
+
+library(dplyr)
+library(fmsb)
+library(scales)
+
+library(dplyr)
+library(MPI)
+
+
+
+make_spider_chart <- function(data,
+                              dataset_name,
+                              out_dir = "newresults/spider_webs",
+                              k = 4,
+                              group_var = "country",
+                              max_scale = 50) {
+  
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  
+  df_sub <- data %>%
+    dplyr::select(starts_with("d"), all_of(group_var))
+  
+  dimension_contribution <- AF_Seq(df = df_sub, k = k, g = group_var)
+  dimension_contribution_weighted <- AF_Seq(df = df_sub, g = group_var)
+  
+  extract_md <- function(weighted_obj, unweighted_obj) {
+    tab <- weighted_obj$pov_df
+    tab$Cvector <- NULL
+    tab$Intensity <- NULL
+    tab$IsPoverty <- NULL
+    
+    tab <- dplyr::bind_cols(tab, unweighted_obj$pov_df["IsPoverty"])
+    tab_poverty <- tab[tab$IsPoverty == 1, , drop = FALSE]
+    tab_poverty$IsPoverty <- NULL
+    
+    r1 <- colSums(tab_poverty, na.rm = TRUE)
+    r2 <- sum(r1, na.rm = TRUE)
+    
+    if (r2 == 0) {
+      return(rep(0, length(r1)))
+    } else {
+      return(r1 / r2)
+    }
+    
+    # Replace any NaN and NA values with 0
+    result[is.nan(result)] <- 0
+    result[is.na(result)] <- 0
+    
+  return(result)
+    
+  }
+  
+  MD_list <- lapply(seq_along(dimension_contribution_weighted), function(i) {
+    extract_md(dimension_contribution_weighted[[i]], dimension_contribution[[i]])
+  })
+  
+  di_count <- dplyr::bind_rows(MD_list)
+  
+# Replace any remaining NaN and NA with 0
+  di_count <- di_count %>%
+    mutate(across(everything(), ~ ifelse(is.nan(.), 0, .))) %>%
+    mutate(across(everything(), ~ replace_na(., 0)))
+
+  
+  if (nrow(di_count) == 3) {
+    rownames(di_count) <- c("Afghanistan", "Pakistan", "South Africa")
+  }
+  
+  di_count$Education  <- di_count$d1_edu
+  di_count$Health     <- di_count$d2_disab
+  di_count$Household  <- di_count$d3_housing + di_count$d4_cleanwater + di_count$d5_cooking+di_count$d7_lighting+di_count$d6_heating +    di_count$d8_sanitation
+  di_count$Employment <- di_count$d10_Emp_ad
+  di_count$Stigma     <- di_count$d11_Stigma
+  di_count$Psychological <- di_count$d12_depression+di_count$d13_Distress
+  
+  radar_web <- di_count[, c("Education","Health","Household",
+                            "Employment","Stigma","Psychological")]
+  
+  write.csv(radar_web,
+            file.path(out_dir, paste0(dataset_name, "_radar_values.csv")),
+            row.names = TRUE)
+  
+  data2 <- radar_web * 100
+  data2 <- rbind(rep(max_scale, 6), rep(0, 6), data2)
+  
+  coul <- c("#1B9E77", "#D95F02", "#7570B3")
+  colors_border <- coul
+  colors_in <- scales::alpha(coul, 0.3)
+  
+pdf(file.path(out_dir, paste0(dataset_name, "_spider.pdf")),
+    width = 8, height = 6)
+
+#tiff(file.path(out_dir, paste0(dataset_name, "_spider.tiff")),
+     #width = 6, height = 6, units = "in", res = 300)
+ 
+  op <- par(mar = c(3, 4, 4, 6))
+  
+  fmsb::radarchart(
+    data2,
+    axistype = 1,
+    pcol = colors_border,
+    pfcol = colors_in,
+    plwd = 2,
+    plty = 1,
+    vlabels = c("Education",
+                "Healthcare",
+                "Household",
+                "Employment",
+                "Stigma",
+                "Psychological"),
+    cglcol = "grey",
+    cglty = 1,
+    axislabcol = "grey",
+    caxislabels = c("0", "", "25%", "", "50%"),
+    cglwd = 0.8,
+    calcex = 0.8,
+    vlcex = 0.8
+  )
+  
+
+  
+  par(op)
+  dev.off()
+  
+  return(radar_web)
+}
+```
+
+
+# spider web made from claude, which taken care of missing value, and replace as 0.  
+
+
+             weight = c(1/6, 1/6, 1/36, 1/36, 1/36, 1/36, 1/36, 1/36, 1/6, 1/6, 1/12, 1/12),
+
+```{r}
+# Make the spider web function
+library(dplyr)
+library(fmsb)
+library(scales)
+
+make_spider_chart <- function(data,
+                              dataset_name,
+                              out_dir = "newresults/spider_webs",
+                              k = 4,
+                              group_var = "rudas_3c",
+                              weight = c(1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12, 1/12),
+                              max_scale = 50) {
+  
+  # Create output directory if it doesn't exist
+  if (!dir.exists(out_dir)) {
+    dir.create(out_dir, recursive = TRUE)
+  }
+  
+  # Select dimensions (d variables) and grouping variable
+  df_sub <- data %>%
+    dplyr::select(starts_with("d"), all_of(group_var))
+  
+  # Calculate dimension contributions
+  dimension_contribution <- AF_Seq(df = df_sub, k = k, g = group_var)
+  dimension_contribution_weighted <- AF_Seq(df = df_sub, g = group_var, w = weight)
+  
+  # Extract multidimensional poverty contributions
+  extract_md <- function(weighted_obj, unweighted_obj) {
+    tab <- weighted_obj$pov_df
+    
+    # Remove unnecessary columns
+    tab$Cvector <- NULL
+    tab$Intensity <- NULL
+    tab$IsPoverty <- NULL
+    
+    # Add poverty indicator
+    tab <- dplyr::bind_cols(tab, unweighted_obj$pov_df["IsPoverty"])
+    
+    # Filter to poor individuals only
+    tab_poverty <- tab[tab$IsPoverty == 1, , drop = FALSE]
+    tab_poverty$IsPoverty <- NULL
+    
+    # Calculate sums and proportions
+    r1 <- colSums(tab_poverty, na.rm = TRUE)
+    r2 <- sum(r1, na.rm = TRUE)
+    
+    # Return result with proper handling of edge cases
+    if (r2 == 0) {
+      result <- setNames(rep(0, length(r1)), names(r1))
+    } else {
+      result <- r1 / r2
+    }
+    
+    # Replace any NaN and NA values with 0
+    result[is.nan(result)] <- 0
+    result[is.na(result)] <- 0
+    
+    return(result)
+  }
+  
+  # Apply extraction to all groups
+  MD_list <- lapply(seq_along(dimension_contribution_weighted), function(i) {
+    result <- extract_md(dimension_contribution_weighted[[i]], dimension_contribution[[i]])
+    as.data.frame(t(result))  # Convert to data frame
+  })
+  
+  # Bind all results into one data frame
+  di_count <- dplyr::bind_rows(MD_list)
+  
+  # Replace any remaining NaN and NA with 0
+  di_count <- di_count %>%
+    mutate(across(everything(), ~ ifelse(is.nan(.), 0, .))) %>%
+    mutate(across(everything(), ~ replace_na(., 0)))
+  
+  # Add country names if 3 rows
+  if (nrow(di_count) == 3) {
+    di_count <- di_count %>%
+      mutate(Country = c("Afghanistan", "Pakistan", "South Africa"), .before = 1)
+  }
+  
+  # Create composite dimensions
+  di_count <- di_count %>%
+    mutate(
+      Education = d1_edu,
+      Health = d2_disab,
+      Household = d3_housing + d4_cleanwater + d5_cooking + d7_lighting + d6_heating + d8_sanitation,
+      Employment = d10_Emp_ad,
+      Stigma = d11_Stigma,
+      Psychological = d12_depression + d13_Distress,
+      .keep = "unused"
+    )
+  
+  # Select only the composite dimensions
+  radar_web <- di_count %>%
+    dplyr::select(Country, Education, Health, Household, Employment, Stigma, Psychological)
+  
+  # Replace any NaN in final radar_web
+  radar_web <- radar_web %>%
+    mutate(across(where(is.numeric), ~ ifelse(is.nan(.), 0, .))) %>%
+    mutate(across(where(is.numeric), ~ replace_na(., 0)))
+  
+  # Save radar values to CSV
+  write.csv(
+    radar_web,
+    file.path(out_dir, paste0(dataset_name, "_radar_values.csv")),
+    row.names = FALSE
+  )
+  
+  # Prepare data for radar chart (scale to percentages)
+  radar_data <- radar_web %>%
+    dplyr::select(-Country) %>%
+    mutate(across(everything(), ~ . * 100))  # Keep as data frame
+  
+  # Add max and min rows for radar chart
+  radar_data <- rbind(
+    rep(max_scale, ncol(radar_data)),
+    rep(0, ncol(radar_data)),
+    radar_data
+  )
+  
+  # Ensure it's a data frame
+  radar_data <- as.data.frame(radar_data)
+  
+  # Set up colors
+  num_countries <- nrow(radar_web)
+  coul <- c("#1B9E77", "#D95F02", "#7570B3")[1:num_countries]
+  colors_border <- coul
+  colors_in <- scales::alpha(colors_border, 0.3)
+  
+  # Create PDF
+  pdf(
+    file.path(out_dir, paste0(dataset_name, "_spider.pdf")),
+    width = 8,
+    height = 6
+  )
+  
+  # Set margins
+  op <- par(mar = c(3, 4, 4, 6))
+  
+  # Create radar chart
+  fmsb::radarchart(
+    radar_data,
+    axistype = 1,
+    pcol = colors_border,
+    pfcol = colors_in,
+    plwd = 2,
+    plty = 1,
+    vlabels = c("Education", "Healthcare", "Household", "Employment", "Stigma", "Psychological"),
+    cglcol = "grey",
+    cglty = 1,
+    axislabcol = "grey",
+    caxislabels = c("0", "", "25%", "", "50%"),
+    cglwd = 0.8,
+    calcex = 0.8,
+    vlcex = 0.8
+  )
+  
+  # Add legend
+  if (nrow(radar_web) > 0) {
+    legend(
+      x = "topright",
+      legend = radar_web$Country,
+      col = colors_border,
+      lwd = 2,
+      bty = "n"
+    )
+  }
+  
+  # Reset graphics parameters
+  par(op)
+  dev.off()
+  
+  return(radar_web)
+}
+
+freq(MP_all$rudas_3c)
+```
+
+
+```{r}
+
+dataset_list <- list(
+  MP_all_all=MP_all,
+  MP_all_moderate_dementia=MP_all_moderate_dementia,
+  MP_all_mild_dementia=MP_all_mild_dementia,
+  MP_all_nodementia=MP_no_dementia,
+  MP_women_moderate_dementia   = MP_women_moderate_dementia,
+  MP_women_mild_dementia=MP_women_mild_dementia,
+  MP_women_nodementia  = MP_women_nodementia,
+  MP_men_moderate_dementia= MP_men_moderate_dementia,
+  MP_men_mild_dementia=MP_men_mild_dementia,
+  MP_men_nodementia    = MP_men_nodementia,
+  MP_age1_moderate_dementia = MP_age1_moderate_dementia,
+  MP_age1_mild_dementia=MP_age1_mild_dementia,
+  MP_age1_nodementia   = MP_age1_nodementia,
+  MP_age2_moderate_dementia = MP_age2_moderate_dementia,
+  MP_age2_mild_dementia=MP_age1_mild_dementia,
+  MP_age2_nodementia   = MP_age1_nodementia,
+  MP_age3_moderate_dementia = MP_age3_moderate_dementia,
+  MP_age3_mild_dementia=MP_age1_mild_dementia,
+  MP_age3_nodementia   = MP_age1_nodementia
+)
+```
+
+
+
+```{r}
+
+library(dplyr)
+library(MPI)
+
+pdf(file.path(out_dir, "combined_spider_charts.pdf"), width = 12, height = 10)
+
+# layout: 3x3 grid on top, shared legend strip at the bottom
+layout(
+  matrix(c(1, 2, 3,
+           4, 5, 6,
+           7, 8, 9,
+           10, 10, 10), nrow = 4, byrow = TRUE),
+  heights = c(1, 1, 1, 0.6)
+)
+
+colors_border <- c("#1B9E77", "#D95F02", "#7570B3")
+
+# --- Panels 1-9: the 9 radar charts ---
+panels <- list(
+  list(data = radar_overall, title = "Overall"),
+  list(data = radar_men,     title = "Men"),
+  list(data = radar_women,   title = "Women"),
+  list(data = radar_age1,    title = "Age 50-59"),
+  list(data = radar_age2,    title = "Age 60-70"),
+  list(data = radar_age3,    title = "Age 70 above"),
+  list(data = radar_afg,     title = "Afghanistan"),
+  list(data = radar_pk,      title = "Pakistan"),
+  list(data = radar_sa,      title = "South Africa")
+)
+
+par(mar = c(2, 2, 3, 2))
+for (p in panels) {
+  plot_radar_panel(p$data, panel_title = p$title, colors_border = colors_border)
+}
+
+# --- Panel 10: shared legend only, now at the bottom ---
+par(mar = c(0, 0, 0, 0))
+plot.new()
+legend(
+  x = "center",
+  legend = c("Cognitively normal", "Mild dementia", "Moderate to severe dementia"),
+  col = colors_border,
+  lwd = 3,
+  lty = 1,
+  horiz = TRUE,
+  bty = "n",
+  cex = 1.3,
+  text.width = NA
+)
+
+dev.off()
+```
+
+
+```{r}
+
+dataset_list <- list(
+  MP_all_all=MP_all,
+  MP_women= MP_women,
+  MP_men= MP_men,
+  MP_age1 = MP_age1,
+  MP_age2= MP_age2,
+  MP_age3= MP_age3,
+  MP_AFG=MP_AFG,
+  MP_PK=MP_PK,
+  MP_SA=MP_SA)
+
+
+
+library(dplyr)
+library(MPI)
+
+radar_results <- lapply(names(dataset_list), function(nm) {
+  make_spider_chart(
+    data = dataset_list[[nm]],
+    dataset_name = nm,
+    out_dir = "../newresults/spider_webs/pdf/",
+    k = 4
+  )
+})
+
+names(radar_results) <- names(dataset_list)
+
+spider_results <- purrr::imap(
+  dataset_list,
+  ~ make_spider_chart(data = .x, dataset_name = .y)
+)
+```
+
+
+# regression
+
+```{r}
+
+Mp_subset_country <- MP_all %>%
+  select(starts_with("d"))
+
+dimension_contribution<-AF_Seq(df = Mp_subset_country, k = 4)
+
+weight<-c(1/6,1/6,1/36,1/36,1/36,1/36,1/36,1/36,1/6,1/6,1/12,1/12)
+
+dimension_contribution_weighted<-AF_Seq(df = Mp_subset_country, w=weight)
+
+weightedIntensity<-dimension_contribution_weighted[[1]]$pov_df
+
+weightedIntensity$IsPoverty<-dimension_contribution[[1]]$pov_df$IsPoverty
+weightedIntensity$Intensity<-weightedIntensity$Cvector
+
+#The intensity of a deprived indication among impoverished people is computed by dividing the number of deprived indicators by the total number of indicators.
+
+dfSummary(weightedIntensity$Intensity)
+
+freq(MP_all$marital_status)
+
+freq(dimension_contribution[[1]]$pov_df$IsPoverty)
+
+MP_all$IsPoverty<-dimension_contribution[[1]]$pov_df$IsPoverty
+
+freq(MP_all$IsPoverty)
+
+MP_all%>%select(starts_with("d"))%>%sum
+
+```
+
+```{r}
+library(nnet)
+
+freq(MP_all$status)
+
+fit_multi <- multinom(
+  rudas_3c ~ scale(Cvector)+age + status + sex + householdsize + country,
+  data = MP_all,
+  na.action = na.omit
+)
+freq()
+
+
+data <- data.frame(
+  rank = factor(rudas_3c(c("low", "medium", "high"), 200, replace = TRUE),
+                levels = c("low", "medium", "high"), ordered = TRUE),
+  x1 = rnorm(200),
+  x2 = rnorm(200)
+)
+```
+# ranked regression. 
+
+```{r}
+library(MASS)
+
+# Make sure your outcome is an ordered factor first
+MP_all$rudas_3c <- factor(MP_all$rudas_3c, ordered = TRUE)
+# If the levels aren't in the right order by default, specify explicitly, e.g.:
+
+
+fit_ord1 <- polr(
+  rudas_3c ~ IsPoverty + age + status + sex + householdsize + country,
+  data = MP_all,
+  na.action = na.omit,
+  Hess = TRUE  # needed to get standard errors
+)
+
+tab_model(fit_ord1)
+
+
+freq(MP_all$IsPoverty)
+
+fit_ord2 <- polr(
+  rudas_3c ~ poor*status + age + status + sex + householdsize + country,
+  data = MP_all,
+  na.action = na.omit,
+  Hess = TRUE  # needed to get standard errors
+)
+
+fit_ord3 <- polr(
+  rudas_3c ~ poor*sex + age + status + sex + householdsize + country,
+  data = MP_all,
+  na.action = na.omit,
+  Hess = TRUE  # needed to get standard errors
+)
+
+
+fit_ord4 <- polr(
+  rudas_3c ~ poor*country + age + status + sex + householdsize + country,
+  data = MP_all,
+  na.action = na.omit,
+  Hess = TRUE  # needed to get standard errors
+)
+summary(fit_ord)
+
+tab_model(fit_ord1)
+
+tab_model(fit_ord2,fit_ord3,fit_ord4)
+
+
+# polr doesn't give p-values by default, so calculate them manually:
+ctable <- coef(summary(fit_ord))
+p_values <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
+ctable <- cbind(ctable, "p value" = p_values)
+ctable
+
+# Odds ratios with 95% CI (often what you'll want to report)
+exp(cbind(OR = coef(fit_ord), confint(fit_ord)))
+```
+#unadjusted model 
+```{r}
+library(MASS)
+library(broom)
+library(dplyr)
+library(openxlsx)
+
+# List of unadjusted models (one predictor at a time)
+
+MP_all$poor<-0
+MP_all$poor[MP_all$Cvector>0]=1
+
+freq(MP_all$poor)
+
+predictors <- c("poor", "age", "sex", "status","householdsize", "country")
+
+# Function to fit a polr model and extract OR, CI, p-value
+run_unadjusted <- function(pred) {
+  form <- as.formula(paste("rudas_3c ~", pred))
+  fit <- polr(form, data = MP_all, na.action = na.omit, Hess = TRUE)
+
+  coef_table <- coef(summary(fit))
+
+  # Keep only predictor coefficient rows (drop cutpoints like "1|2", "2|3")
+  beta_rows <- !grepl("\\|", rownames(coef_table))
+  coef_table <- coef_table[beta_rows, , drop = FALSE]
+
+  p_vals <- pnorm(abs(coef_table[, "t value"]), lower.tail = FALSE) * 2
+
+  ci <- tryCatch(confint(fit), error = function(e) confint.default(fit))
+  if (!is.matrix(ci)) {
+    ci <- matrix(ci, nrow = 1, dimnames = list(rownames(coef_table)[1], c("2.5 %", "97.5 %")))
+  }
+
+  # Match rows safely by name instead of assuming identical order/length
+  ci_matched <- ci[rownames(coef_table), , drop = FALSE]
+
+  data.frame(
+    Predictor = pred,
+    Term = rownames(coef_table),
+    Estimate = coef_table[, "Value"],
+    p.value = p_vals,
+    conf.low = ci_matched[, 1],
+    conf.high = ci_matched[, 2],
+    row.names = NULL
+  )
+}
+
+results_list <- lapply(predictors, run_unadjusted)
+results_all <- do.call(rbind, results_list)
+
+results_all <- results_all %>%
+  mutate(
+    OR = exp(Estimate),
+    CI_low = exp(conf.low),
+    CI_high = exp(conf.high)
+  ) %>%
+  transmute(
+    Predictor,
+    Term,
+    OR = round(OR, 2),
+    `95% CI Lower` = round(CI_low, 2),
+    `95% CI Upper` = round(CI_high, 2),
+    `p-value` = round(p.value, 5)
+  )
+
+# ---- Build formatted Excel workbook ----
+wb <- createWorkbook()
+addWorksheet(wb, "Unadjusted ORs")
+
+writeData(wb, "Unadjusted ORs", results_all, startRow = 1, headerStyle = createStyle(
+  textDecoration = "bold", fgFill = "#D9E1F2", halign = "center", border = "TopBottomLeftRight"
+))
+
+setColWidths(wb, "Unadjusted ORs", cols = 1:6, widths = c(18, 22, 10, 14, 14, 10))
+addStyle(wb, "Unadjusted ORs", style = createStyle(halign = "center", border = "TopBottomLeftRight"),
+         rows = 2:(nrow(results_all) + 1), cols = 1:6, gridExpand = TRUE)
+
+freezePane(wb, "Unadjusted ORs", firstRow = TRUE)
+
+saveWorkbook(wb, "unadjusted_ORs.xlsx", overwrite = TRUE)
+```
+
+
+```{r}
+# Fit the model
+model <- polr(rank ~ x1 + x2, data = data, Hess = TRUE)
+
+summary(model)
+
+# Get p-values (polr doesn't give them by default)
+ctable <- coef(summary(model))
+p_values <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
+ctable <- cbind(ctable, "p value" = p_values)
+ctable
+
+# Predicted probabilities
+predict(model, type = "probs")
+
+# Predicted class
+predict(model, type = "class")
+
+
+
+
+summary(fit_multi)
+s <- summary(fit_multi)
+
+# coefficients and standard errors
+coefs <- s$coefficients
+ses   <- s$standard.errors
+
+# z and p
+zvals <- coefs / ses
+pvals <- 2 * (1 - pnorm(abs(zvals)))
+
+# odds ratios and 95% CI
+OR  <- exp(coefs)
+LL  <- exp(coefs - 1.96 * ses)
+UL  <- exp(coefs + 1.96 * ses)
+
+# combine results
+results <- data.frame(
+  Comparison = rep(rownames(coefs), each = ncol(coefs)),
+  Predictor  = rep(colnames(coefs), times = nrow(coefs)),
+  Estimate   = as.vector(t(coefs)),
+  SE         = as.vector(t(ses)),
+  z          = as.vector(t(zvals)),
+  p          = as.vector(t(pvals)),
+  OR         = as.vector(t(OR)),
+  CI_lower   = as.vector(t(LL)),
+  CI_upper   = as.vector(t(UL))
+)
+
+results
+
+results$OR_CI <- sprintf("%.2f (%.2f, %.2f)",
+                         results$OR, results$CI_lower, results$CI_upper)
+results$p <- round(results$p, 3)
+
+results[, c("Comparison", "Predictor", "OR_CI", "p")]
+
+results$OR_CI <- sprintf("%.2f (%.2f, %.2f)",
+                         results$OR, results$CI_lower, results$CI_upper)
+results$p <- round(results$p, 3)
+
+results[, c("Comparison", "Predictor", "OR_CI", "p")]
+
+final_table <- results[, c("Comparison", "Predictor", "OR_CI", "p")]
+
+write.xlsx(final_table, "multinomial_rudas_clean_table.xlsx", rowNames = FALSE)
+
+library(flextable)
+library(officer)
+
+ft <- flextable(final_table)
+
+doc <- read_docx() %>%
+  body_add_flextable(ft)
+
+print(doc, target = "multinomial_rudas_table.docx")
+```
+
+
+```{r}
+fit.1<-lm(rudas~ age+status+sex+scale(Cvector)+country+householdsize,data=MP_all)
+
+fit.2<-lm(rudas~ age+status+sex+scale(Cvector)*country,data=MP_all)
+fit.3<-lm(rudas~ age+status+sex*scale(Cvector)+country,data=MP_all)
+
+tab_model(fit.1,fit.2,fit.3)
+
+sjPlot::tab_model(fit.3,fit.4,show.ci = TRUE,p.style = "stars")
+
+
+```
+
+```{r}
+library(dplyr)
+library(purrr)
+library(openxlsx)
+library(fmsb)
+library(scales)
+
+make_spider_chart <- function(data,
+                              dataset_name,
+                              out_dir = "results/spider_webs",
+                              k = 4,
+                              group_var = "country",
+                              weight = c(1/6,1/12,1/12,1/30,1/30,1/30,1/30,1/30,1/12,1/12,1/12,1/12),
+                              max_scale = 50) {
+  
+  if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+  
+  df_sub <- data %>%
+    dplyr::select(starts_with("d"), all_of(group_var))
+  
+  # unweighted object: used to define poverty status
+  dimension_contribution <- AF_Seq(df = df_sub, k = k, g = group_var)
+  
+  # weighted object: used to calculate weighted dimension contribution
+  dimension_contribution_weighted <- AF_Seq(df = df_sub, g = group_var, w = weight)
+  
+  extract_md <- function(weighted_obj, unweighted_obj) {
+    tab <- weighted_obj$pov_df
+    tab$Cvector <- NULL
+    tab$Intensity <- NULL
+    tab$IsPoverty <- NULL
+    
+    tab <- dplyr::bind_cols(tab, unweighted_obj$pov_df["IsPoverty"])
+    tab_poverty <- tab[tab$IsPoverty == 1, , drop = FALSE]
+    tab_poverty$IsPoverty <- NULL
+    
+    r1 <- colSums(tab_poverty, na.rm = TRUE)
+    r2 <- sum(r1, na.rm = TRUE)
+    
+    if (r2 == 0) {
+      return(rep(0, length(r1)))
+    } else {
+      return(r1 / r2)
+    }
+  }
+  
+  MD_list <- lapply(seq_along(dimension_contribution_weighted), function(i) {
+    extract_md(dimension_contribution_weighted[[i]], dimension_contribution[[i]])
+  })
+  
+  di_count <- dplyr::bind_rows(MD_list)
+  
+  if (nrow(di_count) == 3) {
+    rownames(di_count) <- c("Afghanistan", "Pakistan", "South Africa")
+  }
+  
+  # exportable full dimension table
+  di_count_export <- di_count %>%
+    dplyr::mutate(Group = rownames(di_count), .before = 1)
+  
+  dimension_table <- di_count_export %>%
+    dplyr::select(
+      Group,
+      d1_Edu, d2_Disab, d3_food, d4_Housing, d5_Cleanwater,
+      d6_Energy, d7_Sanitation, d8_assets, d9_Emp_ad,
+      d10_Stigma, d11_Depression, d14_Distress
+    )
+  
+  # collapsed radar domains
+  di_count$Education <- di_count$d1_Edu
+  di_count$Health <- di_count$d2_Disab + di_count$d3_food
+  di_count$Household <- di_count$d4_Housing + di_count$d5_Cleanwater +
+    di_count$d6_Energy + di_count$d7_Sanitation + di_count$d8_assets
+  di_count$Employment <- di_count$d9_Emp_ad
+  di_count$Stigma <- di_count$d10_Stigma
+  di_count$Psychological <- di_count$d11_Depression + di_count$d14_Distress
+  
+  radar_web <- di_count[, c("Education", "Health", "Household",
+                            "Employment", "Stigma", "Psychological")]
+  
+  radar_web_export <- radar_web %>%
+    dplyr::mutate(Group = rownames(radar_web), .before = 1)
+  
+  # save csv
+  write.csv(radar_web,
+            file.path(out_dir, paste0(dataset_name, "_radar_values.csv")),
+            row.names = TRUE)
+  
+  # save Excel
+  wb <- openxlsx::createWorkbook()
+  
+  openxlsx::addWorksheet(wb, "dimension_contribution")
+  openxlsx::writeData(wb, "dimension_contribution", dimension_table)
+  
+  openxlsx::addWorksheet(wb, "radar_domains")
+  openxlsx::writeData(wb, "radar_domains", radar_web_export)
+  
+  openxlsx::saveWorkbook(
+    wb,
+    file.path(out_dir, paste0(dataset_name, "_spider_outputs.xlsx")),
+    overwrite = TRUE
+  )
+  
+  # radar chart
+  data2 <- radar_web * 100
+  data2 <- rbind(rep(max_scale, 6), rep(0, 6), data2)
+  
+  coul <- c("#1B9E77", "#D95F02", "#7570B3")
+  colors_border <- coul
+  colors_in <- scales::alpha(coul, 0.3)
+  
+  pdf(file.path(out_dir, paste0(dataset_name, "_spider.pdf")),
+      width = 8, height = 6)
+  
+  op <- par(mar = c(3, 4, 4, 6))
+  
+  fmsb::radarchart(
+    data2,
+    axistype = 1,
+    pcol = colors_border,
+    pfcol = colors_in,
+    plwd = 2,
+    plty = 1,
+    vlabels = c("Education",
+                "Healthcare",
+                "Household",
+                "Employment",
+                "Stigma",
+                "Psychological"),
+    cglcol = "grey",
+    cglty = 1,
+    axislabcol = "grey",
+    caxislabels = c("0", "", "25%", "", "50%"),
+    cglwd = 0.8,
+    calcex = 0.8,
+    vlcex = 0.8
+  )
+  
+  par(op)
+  dev.off()
+  
+  return(list(
+    radar_web = radar_web,
+    dimension_table = dimension_table
+  ))
+}
+```
+
+```{r}
+spider_results <- purrr::imap(
+  dataset_list,
+  ~ make_spider_chart(data = .x, dataset_name = .y)
+)
+
+
+safe_sheet_name <- function(name, suffix, existing_names) {
+  base <- substr(paste0(name, "_", suffix), 1, 31)
+  
+  i <- 1
+  new_name <- base
+  while (new_name %in% existing_names) {
+    extra <- paste0("_", i)
+    new_name <- substr(base, 1, 31 - nchar(extra))
+    new_name <- paste0(new_name, extra)
+    i <- i + 1
+  }
+  return(new_name)
+}
+
+library(openxlsx)
+
+wb_all <- openxlsx::createWorkbook()
+existing_sheets <- c()
+
+purrr::imap(spider_results, function(res, nm) {
+  
+  # create safe + unique names
+  sheet_dim <- safe_sheet_name(nm, "dim", existing_sheets)
+  existing_sheets <<- c(existing_sheets, sheet_dim)
+  
+  sheet_rad <- safe_sheet_name(nm, "radar", existing_sheets)
+  existing_sheets <<- c(existing_sheets, sheet_rad)
+  
+  # write dimension table
+  openxlsx::addWorksheet(wb_all, sheet_dim)
+  openxlsx::writeData(wb_all, sheet_dim, res$dimension_table)
+  
+  # write radar table
+  radar_df <- res$radar_web %>%
+    tibble::rownames_to_column("Group")
+  
+  openxlsx::addWorksheet(wb_all, sheet_rad)
+  openxlsx::writeData(wb_all, sheet_rad, radar_df)
+})
+
+openxlsx::saveWorkbook(
+  wb_all,
+  "results/spider_webs/all_spider_outputs.xlsx",
+  overwrite = TRUE
+)
+```
+
+```{r}
+# summarize percent deprived in each dimension by dementia group
+plot_data <- MP_all %>%
+  select(rudas_3c, all_of(items)) %>%
+  pivot_longer(
+    cols = all_of(items),
+    names_to = "Dimension",
+    values_to = "value"
+  ) %>%
+  group_by(rudas_3c, Dimension) %>%
+  summarise(
+    percent = mean(value == 1, na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Dimension = factor(Dimension, levels = rev(items)),
+    Dimension_label = recode(Dimension, !!!item_labels)
+  )
+
+ggplot(plot_data, aes(x = percent, y = Dimension_label, fill = rudas_3c)) +
+  geom_col(
+    position = position_dodge(width = 0.75),
+    width = 0.65
+  ) +
+  geom_text(
+    aes(label = round(percent, 1)),
+    position = position_dodge(width = 0.75),
+    hjust = -0.15,
+    size = 3
+  ) +
+  scale_x_continuous(
+    limits = c(0, 100),
+    expand = expansion(mult = c(0, 0.08))
+  ) +
+  labs(
+    x = "% deprived in each dimension",
+    y = "Dimensions",
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(size = 11),
+    legend.position = "top"
+  )
+
+
+```
+
+# summarize percent deprived in each dimension by dementia group
+
+```{r}
+# summarize percent deprived in each dimension by dementia group
+
+mdp_country <- Mp_all_dementia %>%
+  select(country, starts_with("d")) %>%
+  pivot_longer(
+    cols = starts_with("d"),
+    names_to = "Item",
+    values_to = "value"
+  ) %>%
+  group_by(country, Item) %>%
+  summarise(
+    Percent = mean(value == 1, na.rm = TRUE) * 100,
+    .groups = "drop"
+  )
+
+mdp_long <- Mp_all_dementia %>%
+  select(country, starts_with("d")) %>%
+  pivot_longer(
+    cols = starts_with("d"),
+    names_to = "Item",
+    values_to = "value"
+  )
+
+chisq_results <- mdp_long %>%
+  group_by(Item) %>%
+  summarise(
+    p_value = tryCatch(
+      chisq.test(table(country, value))$p.value,
+      error = function(e) NA
+    ),
+    .groups = "drop"
+  )
+
+chisq_results <- chisq_results %>%
+  mutate(p_adj = p.adjust(p_value, method = "BH"))
+
+
+mdp_country <- mdp_long %>%
+  group_by(country, Item) %>%
+  summarise(
+    Percent = mean(value == 1, na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  left_join(chisq_results, by = "Item")
+
+library(ggplot2)
+
+
+mdp_country <- mdp_country %>%
+  mutate(
+    sig = case_when(
+      p_adj < 0.001 ~ "***",
+      p_adj < 0.01  ~ "**",
+      p_adj < 0.05  ~ "*",
+      TRUE ~ ""
+    )
+  )
+
+p <- ggplot(mdp_country, aes(x = Item, y = Percent, fill = country)) +
+  geom_col(position = position_dodge()) +
+  coord_flip() +
+  scale_x_discrete(labels = item_labels) +  
+  theme_minimal(base_size = 14) +
+  labs(
+    x = "Deprivation Items",
+    y = "Percentage Deprived (%)",
+    title = "Deprivation by Item Among Dementia Participants (by Country)",
+    fill = "Country"
+  )
+
+# Add significance stars (one per item)
+sig_labels <- mdp_country %>%
+  group_by(Item) %>%
+  summarise(
+    Percent = max(Percent) + 5,
+    sig = unique(sig)
+  )
+
+p<-p + geom_text(
+  data = sig_labels,
+  aes(x = Item, y = Percent, label = sig),
+  inherit.aes = FALSE,
+  size = 5
+)
+
+ggsave("../results/mdp_deprivation_dementia_by_country.jpg", 
+       plot = p,
+       width = 10, height = 8, dpi = 300)
+```
+
+summarize percent deprived in each dimension by dementia group
+
+```{r}
+# summarize percent deprived in each dimension by dementia group
+freq(MP_no_dementia$country)
+
+mdp_country <- MP_no_dementia %>%
+  select(country, starts_with("d")) %>%
+  pivot_longer(
+    cols = starts_with("d"),
+    names_to = "Item",
+    values_to = "value"
+  ) %>%
+  group_by(country, Item) %>%
+  summarise(
+    Percent = mean(value == 1, na.rm = TRUE) * 100,
+    .groups = "drop"
+  )
+
+mdp_long <- MP_no_dementia %>%
+  select(country, starts_with("d")) %>%
+  pivot_longer(
+    cols = starts_with("d"),
+    names_to = "Item",
+    values_to = "value"
+  )
+
+chisq_results <- mdp_long %>%
+  group_by(Item) %>%
+  summarise(
+    p_value = tryCatch(
+      chisq.test(table(country, value))$p.value,
+      error = function(e) NA
+    ),
+    .groups = "drop"
+  )
+
+chisq_results <- chisq_results %>%
+  mutate(p_adj = p.adjust(p_value, method = "BH"))
+
+
+mdp_country <- mdp_long %>%
+  group_by(country, Item) %>%
+  summarise(
+    Percent = mean(value == 1, na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  left_join(chisq_results, by = "Item")
+
+library(ggplot2)
+
+
+mdp_country <- mdp_country %>%
+  mutate(
+    sig = case_when(
+      p_adj < 0.001 ~ "***",
+      p_adj < 0.01  ~ "**",
+      p_adj < 0.05  ~ "*",
+      TRUE ~ ""
+    )
+  )
+
+p <- ggplot(mdp_country, aes(x = Item, y = Percent, fill = country)) +
+  geom_col(position = position_dodge()) +
+  coord_flip() +
+  scale_x_discrete(labels = item_labels) +  
+  theme_minimal(base_size = 14) +
+  labs(
+    x = "Deprivation Items",
+    y = "Percentage Deprived (%)",
+    title = "Deprivation by Item Among Participants without Dementia (by Country)",
+    fill = "Country"
+  )
+
+# Add significance stars (one per item)
+sig_labels <- mdp_country %>%
+  group_by(Item) %>%
+  summarise(
+    Percent = max(Percent) + 5,
+    sig = unique(sig)
+  )
+
+p<-p + geom_text(
+  data = sig_labels,
+  aes(x = Item, y = Percent, label = sig),
+  inherit.aes = FALSE,
+  size = 5
+)
+
+ggsave("./newresults/mdp_deprivation_no_dementia_by_country.jpg", 
+       plot = p,
+       width = 10, height = 8, dpi = 300)
+```
+# making table 4
+
+```{r}
+
+Mp_subset <- MP_all %>%select(starts_with("d"))
+
+
+library(MPI)
+
+out_seq1 <- AF_Seq(df = Mp_subset,  k = 1)
+out_seq2 <- AF_Seq(df = Mp_subset, k = 2)
+out_seq3 <- AF_Seq(df = Mp_subset,  k = 3)
+out_seq4 <- AF_Seq(df = Mp_subset, k = 4)
+out_seq5 <- AF_Seq(df = Mp_subset, k = 5)
+out_seq6 <- AF_Seq(df = Mp_subset,  k = 6)
+out_seq7 <- AF_Seq(df = Mp_subset,  k = 7)
+out_seq8 <- AF_Seq(df = Mp_subset,k = 8)
+out_seq9 <- AF_Seq(df = Mp_subset, k = 9)
+out_seq10 <- AF_Seq(df = Mp_subset, k = 10)
+out_seq11 <- AF_Seq(df = Mp_subset, k = 11)
+out_seq12 <- AF_Seq(df = Mp_subset,  k = 12)
+
+Mp_subset <- MP_no_dementia %>%select(starts_with("d"), country)
+
+library(MPI)
+
+out_seq_1 <- AF_Seq(df = Mp_subset, g = "country", k = 1)
+out_seq_2 <- AF_Seq(df = Mp_subset, g = "country", k = 2)
+out_seq_3 <- AF_Seq(df = Mp_subset, g = "country", k = 3)
+out_seq_4 <- AF_Seq(df = Mp_subset, g = "country", k = 4)
+out_seq_5 <- AF_Seq(df = Mp_subset, g = "country", k = 5)
+out_seq_6 <- AF_Seq(df = Mp_subset, g = "country", k = 6)
+out_seq_7 <- AF_Seq(df = Mp_subset, g = "country", k = 7)
+out_seq_8 <- AF_Seq(df = Mp_subset, g = "country", k = 8)
+out_seq_9 <- AF_Seq(df = Mp_subset, g = "country", k = 9)
+out_seq_10 <- AF_Seq(df = Mp_subset, g = "country", k = 10)
+out_seq_11 <- AF_Seq(df = Mp_subset, g = "country", k = 11)
+out_seq_12 <- AF_Seq(df = Mp_subset, g = "country", k = 12)
+
+freq(Mp_subset$country)
+
+r1=c(1,out_seq1[[1]]$H,out_seq1[[1]]$A,out_seq1[[1]]$M0,out_seq1[[1]]$H,out_seq_1[[1]]$A,out_seq_1[[1]]$M0,out_seq_1[[2]]$H,out_seq_1[[2]]$A,out_seq_1[[2]]$M0,out_seq_1[[3]]$H,out_seq_1[[3]]$A,out_seq_1[[3]]$M0)
+r2=c(2,out_seq2[[1]]$H,out_seq2[[1]]$A,out_seq2[[1]]$M0,out_seq_2[[1]]$H,out_seq_2[[1]]$A,out_seq_2[[1]]$M0,out_seq_2[[2]]$H,out_seq_2[[2]]$A,out_seq_2[[2]]$M0,out_seq_2[[3]]$H,out_seq_2[[3]]$A,out_seq_2[[3]]$M0)
+r3=c(3,out_seq3[[1]]$H,out_seq3[[1]]$A,out_seq3[[1]]$M0,out_seq_3[[1]]$H,out_seq_3[[1]]$A,out_seq_3[[1]]$M0,out_seq_3[[2]]$H,out_seq_3[[2]]$A,out_seq_3[[2]]$M0,out_seq_3[[3]]$H,out_seq_3[[3]]$A,out_seq_3[[3]]$M0)
+r4=c(4,out_seq4[[1]]$H,out_seq4[[1]]$A,out_seq4[[1]]$M0,out_seq_4[[1]]$H,out_seq_4[[1]]$A,out_seq_4[[1]]$M0,out_seq_4[[2]]$H,out_seq_4[[2]]$A,out_seq_4[[2]]$M0,out_seq_4[[3]]$H,out_seq_4[[3]]$A,out_seq_4[[3]]$M0)
+r5=c(5,out_seq5[[1]]$H,out_seq5[[1]]$A,out_seq5[[1]]$M0,out_seq_5[[1]]$H,out_seq_5[[1]]$A,out_seq_5[[1]]$M0,out_seq_5[[2]]$H,out_seq_5[[2]]$A,out_seq_5[[2]]$M0,out_seq_5[[3]]$H,out_seq_5[[3]]$A,out_seq_5[[3]]$M0)
+r6=c(6,out_seq6[[1]]$H,out_seq6[[1]]$A,out_seq6[[1]]$M0,out_seq_6[[1]]$H,out_seq_6[[1]]$A,out_seq_6[[1]]$M0,out_seq_6[[2]]$H,out_seq_6[[2]]$A,out_seq_6[[2]]$M0,out_seq_6[[3]]$H,out_seq_6[[3]]$A,out_seq_6[[3]]$M0)
+r7=c(7,out_seq7[[1]]$H,out_seq7[[1]]$A,out_seq7[[1]]$M0,out_seq_7[[1]]$H,out_seq_7[[1]]$A,out_seq_7[[1]]$M0,out_seq_7[[2]]$H,out_seq_7[[2]]$A,out_seq_7[[2]]$M0,out_seq_7[[3]]$H,out_seq_7[[3]]$A,out_seq_7[[3]]$M0)
+r8=c(8,out_seq8[[1]]$H,out_seq8[[1]]$A,out_seq8[[1]]$M0,out_seq_8[[1]]$H,out_seq_8[[1]]$A,out_seq_8[[1]]$M0,out_seq_8[[2]]$H,out_seq_8[[2]]$A,out_seq_8[[2]]$M0,out_seq_8[[2]]$H,out_seq_8[[2]]$A,out_seq_8[[2]]$M0)
+r9=c(9,out_seq9[[1]]$H,out_seq9[[1]]$A,out_seq9[[1]]$M0,out_seq_9[[1]]$H,out_seq_9[[1]]$A,out_seq_9[[1]]$M0,out_seq_9[[2]]$H,out_seq_9[[2]]$A,out_seq_9[[2]]$M0,out_seq_9[[2]]$H,out_seq_9[[2]]$A,out_seq_9[[2]]$M0)
+r10=c(10,out_seq10[[1]]$H,out_seq10[[1]]$A,out_seq10[[1]]$M0,out_seq_10[[1]]$H,out_seq_10[[1]]$A,out_seq_10[[1]]$M0,out_seq_10[[2]]$H,out_seq_10[[2]]$A,out_seq_10[[2]]$M0,out_seq_10[[2]]$H,out_seq_10[[2]]$A,out_seq_10[[2]]$M0)
+r11=c(11,out_seq11[[1]]$H,out_seq11[[1]]$A,out_seq11[[1]]$M0,out_seq_11[[1]]$H,out_seq_11[[1]]$A,out_seq_11[[1]]$M0,out_seq_11[[2]]$H,out_seq_11[[2]]$A,out_seq_11[[2]]$M0,out_seq_11[[2]]$H,out_seq_11[[2]]$A,out_seq_11[[2]]$M0)
+r12=c(12,out_seq12[[1]]$H,out_seq12[[1]]$A,out_seq12[[1]]$M0,out_seq_12[[1]]$H,out_seq_12[[1]]$A,out_seq_12[[1]]$M0,out_seq_12[[2]]$H,out_seq_12[[2]]$A,out_seq_12[[2]]$M0,out_seq_12[[2]]$H,out_seq_12[[2]]$A,out_seq_12[[2]]$M0)
+
+r0<-c("K","H","A","M0","H","A","M0","H","A","M0","H","A","M0")
+
+table4<-rbind(r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12)
+colnames(table4)<-c("","All Together","","","Afghanistan","","","Pakistan","","","South Africa","","")
+rownames(table4)<-c("","1","2","3","4","5","6","7","8","9","10","11","12")
+
+write.csv(table4,"../results/table 4.csv")
+
+```
+
